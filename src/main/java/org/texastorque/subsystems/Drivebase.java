@@ -28,13 +28,12 @@ import edu.wpi.first.math.kinematics.SwerveModuleState;
 import edu.wpi.first.math.numbers.N3;
 import edu.wpi.first.math.util.Units;
 import edu.wpi.first.wpilibj.DriverStation;
-import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.smartdashboard.Field2d;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
 public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> implements Subsystems {
     public static enum State implements TorqueState {
-        FIELD_RELATIVE(null), ROBOT_RELATIVE(null), XF(FIELD_RELATIVE);
+        FIELD_RELATIVE(null), ROBOT_RELATIVE(null), XF(FIELD_RELATIVE), ZERO(FIELD_RELATIVE);
 
         public final State parent;
 
@@ -44,7 +43,7 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
     }
 
     public enum SpeedSetting {
-        SLOW(.25), MID(.5), FAST(1.0), SEQ(1);
+        SLOW(.25), MID(.5), FAST(1.0);
 
         private static final SpeedSetting[] vals = values();
 
@@ -63,28 +62,10 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
         }
     }
 
-    public static class SpeedSequence {
-        final double initSpeed, finalSpeed, duration, startTime, speedDeceleration;
-
-        // Linearly decreases the speed every second for a duration of time
-        public SpeedSequence(final SpeedSetting initSpeed, final SpeedSetting finalSpeed,
-                final double duration) {
-            this.initSpeed = initSpeed.speed;
-            this.finalSpeed = finalSpeed.speed;
-            this.duration = duration;
-            speedDeceleration = (this.initSpeed - this.finalSpeed) / duration;
-            startTime = Timer.getFPGATimestamp();
-        }
-
-        public double get() {
-            return Math.max(initSpeed - speedDeceleration * (Timer.getFPGATimestamp() - startTime),
-                    finalSpeed);
-        }
-    }
-
     private static volatile Drivebase instance;
 
-    public static final double WIDTH = Units.inchesToMeters(18), LENGTH = Units.inchesToMeters(21);
+    public static final double WIDTH = Units.inchesToMeters(21.25),
+            LENGTH = Units.inchesToMeters(21.25);
 
     public static final Pose2d INITIAL_POS = new Pose2d(0, 0, Rotation2d.fromRadians(0));
 
@@ -104,8 +85,7 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
     private static final Vector<N3> VISION_STDS =
             VecBuilder.fill(0.1, 0.1, Units.degreesToRadians(10));
 
-    public final static double MAX_VELOCITY = 3.5, MAX_ACCELERATION = 3.5,
-            MAX_ANGULAR_VELOCITY = 2 * Math.PI, MAX_ANGULAR_ACCELERATION = 2 * Math.PI;
+    public final static double MAX_VELOCITY = 5, MAX_ANGULAR_VELOCITY = 5;
 
     public static SwerveModulePosition invertSwerveModuleDistance(final SwerveModulePosition pose) {
         return new SwerveModulePosition(-pose.distanceMeters, pose.angle);
@@ -137,15 +117,16 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
 
     public SpeedSetting speedSetting = SpeedSetting.FAST;
 
-    public SpeedSequence speedSequence = new SpeedSequence(speedSetting, speedSetting, -1);
+    public double driveP = .2, turnP = 4;
 
     private Drivebase() {
         super(State.FIELD_RELATIVE);
 
-        fl = new TorqueSwerveX("Front Left", Ports.FL_MOD, 0);
-        fr = new TorqueSwerveX("Front Right", Ports.FR_MOD, 0);
-        bl = new TorqueSwerveX("Back Left", Ports.BL_MOD, 0);
-        br = new TorqueSwerveX("Back Right", Ports.BR_MOD, 0);
+        bl = new TorqueSwerveX("Back Left", Ports.BL_MOD, 0.6841, driveP, turnP);
+        br = new TorqueSwerveX("Back Right", Ports.BR_MOD, -1.87583, driveP, turnP);
+        fl = new TorqueSwerveX("Front Left", Ports.FL_MOD, 0.1088, driveP, turnP);
+        fr = new TorqueSwerveX("Front Right", Ports.FR_MOD, -2.01565, driveP, turnP);
+
 
         kinematics = new SwerveDriveKinematics(LOC_BL, LOC_BR, LOC_FL, LOC_FR);
 
@@ -157,6 +138,8 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
             swerveStates[i] = new SwerveModuleState();
 
         SmartDashboard.putData("FIELD", fieldMap);
+        SmartDashboard.putNumber("Drive P", driveP);
+    
     }
 
     public boolean isState(State state) {
@@ -165,7 +148,6 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
 
     @Override
     public final void initialize(final TorqueMode mode) {
-
         mode.onAuto(() -> {
             isRotationLocked = false;
             desiredState = State.ROBOT_RELATIVE;
@@ -188,18 +170,20 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
         inputSpeeds = inputSpeeds.toFieldRelativeSpeeds(gyro.getHeadingCCW());
     }
 
+
     @Override
     public final void update(final TorqueMode mode) {
         updateFeedback();
+        Debug.log("State", desiredState.toString());
 
 
         if (desiredState == State.XF) {
-            xFactor();
+            manuallySetModuleStates(45, 135, 135, 45);
+        } else if (desiredState == State.ZERO) {
+            manuallySetModuleStates(0, 0, 0, 0);
         } else {
             if (mode.isTeleop()) {
-                inputSpeeds =
-                        inputSpeeds.times(speedSetting == SpeedSetting.SEQ ? speedSequence.get()
-                                : speedSetting.speed);
+                inputSpeeds = inputSpeeds.times(speedSetting.speed);
 
                 convertToFieldRelative();
             }
@@ -209,19 +193,25 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
             SwerveDriveKinematics.desaturateWheelSpeeds(swerveStates, MAX_VELOCITY);
 
             if (inputSpeeds.hasZeroVelocity()) {
-                preseveModulePositions();
+                manuallySetModuleStates(swerveStates[0].angle.getDegrees(),
+                        swerveStates[1].angle.getDegrees(), swerveStates[2].angle.getDegrees(),
+                        swerveStates[3].angle.getDegrees());
+
             } else {
-                fl.setDesiredState(swerveStates[0]);
-                fr.setDesiredState(swerveStates[1]);
-                bl.setDesiredState(swerveStates[2]);
-                br.setDesiredState(swerveStates[3]);
+                bl.setDesiredState(swerveStates[0]);
+                br.setDesiredState(swerveStates[1]);
+                fl.setDesiredState(swerveStates[2]);
+                fr.setDesiredState(swerveStates[3]);
+
             }
         }
 
         desiredState = desiredState.parent;
         Debug.log("Speed Shift State", speedSetting.toString());
-        Debug.log("Speed Shift Value",
-                speedSetting == SpeedSetting.SEQ ? speedSequence.get() : speedSetting.speed);
+
+        driveP = SmartDashboard.getNumber("Drive P", -1);
+        bl.setDrivePID(driveP);
+
     }
 
     public void resetGyro() {
@@ -238,17 +228,12 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
         Debug.log("Current Robot Pose", poseEstimator.getEstimatedPosition().toString());
     }
 
-    private void preseveModulePositions() {
-        fl.setDesiredState(new SwerveModuleState(0, swerveStates[0].angle));
-        fr.setDesiredState(new SwerveModuleState(0, swerveStates[1].angle));
-        bl.setDesiredState(new SwerveModuleState(0, swerveStates[2].angle));
-        br.setDesiredState(new SwerveModuleState(0, swerveStates[3].angle));
-    }
+    private void manuallySetModuleStates(final double blAngle, final double brAngle,
+            final double flAngle, final double frAngle) {
+        bl.setDesiredState(new SwerveModuleState(0, Rotation2d.fromDegrees(blAngle)));
+        br.setDesiredState(new SwerveModuleState(0, Rotation2d.fromDegrees(brAngle)));
+        fl.setDesiredState(new SwerveModuleState(0, Rotation2d.fromDegrees(flAngle)));
+        fr.setDesiredState(new SwerveModuleState(0, Rotation2d.fromDegrees(frAngle)));
 
-    private void xFactor() {
-        fl.setDesiredState(new SwerveModuleState(0, Rotation2d.fromDegrees(45)));
-        fr.setDesiredState(new SwerveModuleState(0, Rotation2d.fromDegrees(135)));
-        bl.setDesiredState(new SwerveModuleState(0, Rotation2d.fromDegrees(135)));
-        br.setDesiredState(new SwerveModuleState(0, Rotation2d.fromDegrees(45)));
     }
 }
