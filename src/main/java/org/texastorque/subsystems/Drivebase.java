@@ -64,8 +64,7 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
 
     private static volatile Drivebase instance;
 
-    public static final double WIDTH = Units.inchesToMeters(21.25),
-            LENGTH = Units.inchesToMeters(21.25);
+    public static final double WIDTH = Units.inchesToMeters(58/3);
 
     public static final Pose2d INITIAL_POS = new Pose2d(0, 0, Rotation2d.fromRadians(0));
 
@@ -85,7 +84,7 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
     private static final Vector<N3> VISION_STDS =
             VecBuilder.fill(0.1, 0.1, Units.degreesToRadians(10));
 
-    public final static double MAX_VELOCITY = 5, MAX_ANGULAR_VELOCITY = 5;
+    public final static double MAX_VELOCITY = 5, MAX_ANGULAR_VELOCITY = 8;
 
     public static SwerveModulePosition invertSwerveModuleDistance(final SwerveModulePosition pose) {
         return new SwerveModulePosition(-pose.distanceMeters, pose.angle);
@@ -95,10 +94,10 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
         return instance == null ? instance = new Drivebase() : instance;
     }
 
-    private final Translation2d LOC_FL = new Translation2d(LENGTH / 2, -WIDTH / 2),
-            LOC_FR = new Translation2d(LENGTH / 2, WIDTH / 2),
-            LOC_BL = new Translation2d(-LENGTH / 2, -WIDTH / 2),
-            LOC_BR = new Translation2d(-LENGTH / 2, WIDTH / 2);
+    private final Translation2d LOC_FL = new Translation2d(WIDTH / 2, WIDTH / 2),
+            LOC_FR = new Translation2d(WIDTH / 2, -WIDTH / 2),
+            LOC_BL = new Translation2d(-WIDTH / 2, WIDTH / 2),
+            LOC_BR = new Translation2d(-WIDTH / 2, -WIDTH / 2);
 
     private final SwerveDriveKinematics kinematics;
     private final SwerveDrivePoseEstimator poseEstimator;
@@ -113,24 +112,22 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
 
     public TorqueSwerveSpeeds inputSpeeds = new TorqueSwerveSpeeds(0, 0, 0);
 
-    public boolean isRotationLocked = true;
-
     public SpeedSetting speedSetting = SpeedSetting.FAST;
 
-    public double driveP = .2, turnP = 4;
+    public double driveP = .5;
 
     private Drivebase() {
         super(State.FIELD_RELATIVE);
 
-        bl = new TorqueSwerveX("Back Left", Ports.BL_MOD, 0.6841, driveP, turnP);
-        br = new TorqueSwerveX("Back Right", Ports.BR_MOD, -1.87583, driveP, turnP);
-        fl = new TorqueSwerveX("Front Left", Ports.FL_MOD, 0.1088, driveP, turnP);
-        fr = new TorqueSwerveX("Front Right", Ports.FR_MOD, -2.01565, driveP, turnP);
+        fl = new TorqueSwerveX("Front Left", Ports.FL_MOD, 0.1088, driveP);
+        fr = new TorqueSwerveX("Front Right", Ports.FR_MOD, -2.01565, driveP);
+        bl = new TorqueSwerveX("Back Left", Ports.BL_MOD, 0.6841, driveP);
+        br = new TorqueSwerveX("Back Right", Ports.BR_MOD, -0.66280, driveP);
 
 
-        kinematics = new SwerveDriveKinematics(LOC_BL, LOC_BR, LOC_FL, LOC_FR);
+        kinematics = new SwerveDriveKinematics(LOC_FL, LOC_FR, LOC_BL, LOC_BR);
 
-        poseEstimator = new SwerveDrivePoseEstimator(kinematics, gyro.getHeadingCCW(),
+        poseEstimator = new SwerveDrivePoseEstimator(kinematics, gyro.getHeadingCW(),
                 getModulePositions(), INITIAL_POS, STATE_STDS, VISION_STDS);
 
         swerveStates = new SwerveModuleState[4];
@@ -138,8 +135,7 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
             swerveStates[i] = new SwerveModuleState();
 
         SmartDashboard.putData("FIELD", fieldMap);
-        SmartDashboard.putNumber("Drive P", driveP);
-    
+        SmartDashboard.putNumber("Drive PID", driveP);
     }
 
     public boolean isState(State state) {
@@ -149,12 +145,10 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
     @Override
     public final void initialize(final TorqueMode mode) {
         mode.onAuto(() -> {
-            isRotationLocked = false;
             desiredState = State.ROBOT_RELATIVE;
         });
 
         mode.onTeleop(() -> {
-            isRotationLocked = true;
             desiredState = State.FIELD_RELATIVE;
         });
     }
@@ -167,7 +161,7 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
     }
 
     public void convertToFieldRelative() {
-        inputSpeeds = inputSpeeds.toFieldRelativeSpeeds(gyro.getHeadingCCW());
+        inputSpeeds = inputSpeeds.toFieldRelativeSpeeds(gyro.getHeadingCW());
     }
 
 
@@ -178,7 +172,7 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
 
 
         if (desiredState == State.XF) {
-            manuallySetModuleStates(45, 135, 135, 45);
+            manuallySetModuleStates(0.79, 2.36, 2.36, 0.79);
         } else if (desiredState == State.ZERO) {
             manuallySetModuleStates(0, 0, 0, 0);
         } else {
@@ -193,15 +187,16 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
             SwerveDriveKinematics.desaturateWheelSpeeds(swerveStates, MAX_VELOCITY);
 
             if (inputSpeeds.hasZeroVelocity()) {
-                manuallySetModuleStates(swerveStates[0].angle.getDegrees(),
-                        swerveStates[1].angle.getDegrees(), swerveStates[2].angle.getDegrees(),
-                        swerveStates[3].angle.getDegrees());
+                manuallySetModuleStates(swerveStates[0].angle.getRadians(),
+                        swerveStates[1].angle.getRadians(), swerveStates[2].angle.getRadians(),
+                        swerveStates[3].angle.getRadians());
 
             } else {
-                bl.setDesiredState(swerveStates[0]);
-                br.setDesiredState(swerveStates[1]);
-                fl.setDesiredState(swerveStates[2]);
-                fr.setDesiredState(swerveStates[3]);
+                fl.setDesiredState(swerveStates[0]);
+                fr.setDesiredState(swerveStates[1]);
+                bl.setDesiredState(swerveStates[2]);
+                br.setDesiredState(swerveStates[3]);
+       
 
             }
         }
@@ -209,17 +204,21 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
         desiredState = desiredState.parent;
         Debug.log("Speed Shift State", speedSetting.toString());
 
-        driveP = SmartDashboard.getNumber("Drive P", -1);
-        bl.setDrivePID(driveP);
+        driveP = SmartDashboard.getNumber("Drive PID", -1);
 
+        fl.setDrivePID(driveP);
+        fr.setDrivePID(driveP);
+        bl.setDrivePID(driveP);
+        br.setDrivePID(driveP);
     }
 
     public void resetGyro() {
         gyro.setOffsetCW(Rotation2d.fromRadians(0));
+        poseEstimator.resetPosition(gyro.getHeadingCW(), getModulePositions(), INITIAL_POS);
     }
 
     private void updateFeedback() {
-        poseEstimator.update(gyro.getHeadingCCW(), getModulePositions());
+        poseEstimator.update(gyro.getHeadingCW(), getModulePositions());
 
         fieldMap.setRobotPose(DriverStation.getAlliance() == DriverStation.Alliance.Blue
                 ? poseEstimator.getEstimatedPosition()
@@ -228,12 +227,14 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
         Debug.log("Current Robot Pose", poseEstimator.getEstimatedPosition().toString());
     }
 
-    private void manuallySetModuleStates(final double blAngle, final double brAngle,
-            final double flAngle, final double frAngle) {
-        bl.setDesiredState(new SwerveModuleState(0, Rotation2d.fromDegrees(blAngle)));
-        br.setDesiredState(new SwerveModuleState(0, Rotation2d.fromDegrees(brAngle)));
-        fl.setDesiredState(new SwerveModuleState(0, Rotation2d.fromDegrees(flAngle)));
-        fr.setDesiredState(new SwerveModuleState(0, Rotation2d.fromDegrees(frAngle)));
+    private void manuallySetModuleStates(final double flAngle, final double frAngle,
+            final double blAngle, final double brAngle) {
+
+        fl.setDesiredState(new SwerveModuleState(0, Rotation2d.fromRadians(flAngle)));
+        fr.setDesiredState(new SwerveModuleState(0, Rotation2d.fromRadians(frAngle)));
+        bl.setDesiredState(new SwerveModuleState(0, Rotation2d.fromRadians(blAngle)));
+        br.setDesiredState(new SwerveModuleState(0, Rotation2d.fromRadians(brAngle)));
+
 
     }
 }
