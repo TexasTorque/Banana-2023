@@ -11,8 +11,8 @@ public final class EventMap implements Subsystems {
     public static Map<String, TorqueCommand> get() {
         final Map<String, TorqueCommand> map = new HashMap<String, TorqueCommand>();
 
-        map.put("intake", new TorqueRun(() -> {
-            // arm.setState(Arm.State.INTAKE);
+        map.put("high", new TorqueRun(() -> {
+            arm.setState(Arm.State.INTAKE);
             // intake.setState(Intake.State.INTAKE);
         }));
         return map;
