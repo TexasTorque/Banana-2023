@@ -94,10 +94,11 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
         return instance == null ? instance = new Drivebase() : instance;
     }
 
-    private final Translation2d LOC_FL = new Translation2d(WIDTH / 2, WIDTH / 2),
-            LOC_FR = new Translation2d(WIDTH / 2, -WIDTH / 2),
-            LOC_BL = new Translation2d(-WIDTH / 2, WIDTH / 2),
-            LOC_BR = new Translation2d(-WIDTH / 2, -WIDTH / 2);
+    // Should rotate around the back right module 🤷‍♂️
+    private final Translation2d LOC_FL = new Translation2d(WIDTH, WIDTH),
+            LOC_FR = new Translation2d(WIDTH, -WIDTH),
+            LOC_BL = new Translation2d(-WIDTH, 0),
+            LOC_BR = new Translation2d(0, 0);
 
     private final SwerveDriveKinematics kinematics;
     private final SwerveDrivePoseEstimator poseEstimator;
