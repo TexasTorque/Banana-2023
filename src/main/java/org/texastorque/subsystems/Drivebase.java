@@ -64,7 +64,7 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
 
     private static volatile Drivebase instance;
 
-    public static final double WIDTH = Units.inchesToMeters(58/3);
+    public static final double WIDTH = Units.inchesToMeters(58 / 3);
 
     public static final Pose2d INITIAL_POS = new Pose2d(0, 0, Rotation2d.fromRadians(0));
 
@@ -84,7 +84,7 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
     private static final Vector<N3> VISION_STDS =
             VecBuilder.fill(0.1, 0.1, Units.degreesToRadians(10));
 
-    public final static double MAX_VELOCITY = 5, MAX_ANGULAR_VELOCITY = 8;
+    public final static double MAX_VELOCITY = 4, MAX_ACCELERATION = 2, MAX_ANGULAR_VELOCITY = 6;
 
     public static SwerveModulePosition invertSwerveModuleDistance(final SwerveModulePosition pose) {
         return new SwerveModulePosition(-pose.distanceMeters, pose.angle);
@@ -154,10 +154,8 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
     }
 
     public SwerveModulePosition[] getModulePositions() {
-        return new SwerveModulePosition[] {invertSwerveModuleDistance(fl.getPosition()),
-                invertSwerveModuleDistance(fr.getPosition()),
-                invertSwerveModuleDistance(bl.getPosition()),
-                invertSwerveModuleDistance(br.getPosition())};
+        return new SwerveModulePosition[] {fl.getPosition(), fr.getPosition(), bl.getPosition(),
+                br.getPosition()};
     }
 
     public void convertToFieldRelative() {
@@ -196,7 +194,7 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
                 fr.setDesiredState(swerveStates[1]);
                 bl.setDesiredState(swerveStates[2]);
                 br.setDesiredState(swerveStates[3]);
-       
+
 
             }
         }
@@ -215,6 +213,14 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
     public void resetGyro() {
         gyro.setOffsetCW(Rotation2d.fromRadians(0));
         poseEstimator.resetPosition(gyro.getHeadingCW(), getModulePositions(), INITIAL_POS);
+    }
+
+    public void resetPose(Pose2d pose) {
+        poseEstimator.resetPosition(gyro.getHeadingCW(), getModulePositions(), pose);
+    }
+
+    public Pose2d getPose() {
+        return poseEstimator.getEstimatedPosition();
     }
 
     private void updateFeedback() {
