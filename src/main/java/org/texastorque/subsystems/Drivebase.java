@@ -18,6 +18,7 @@ import org.texastorque.torquelib.swerve.TorqueSwerveSpeeds;
 import org.texastorque.torquelib.swerve.TorqueSwerveX;
 import edu.wpi.first.math.VecBuilder;
 import edu.wpi.first.math.Vector;
+import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.estimator.SwerveDrivePoseEstimator;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
@@ -110,11 +111,18 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
 
     private final TorqueNavXGyro gyro = TorqueNavXGyro.getInstance();
 
+    private final PIDController rotationLock = new PIDController(0.09, 0.0, 0.0003);
+
     private SwerveModuleState[] swerveStates;
 
     public TorqueSwerveSpeeds inputSpeeds;
 
     public SpeedSetting speedSetting = SpeedSetting.FAST;
+
+    private double lastHeading = 0;
+
+    public boolean useRotationLock = true;
+
 
     private Drivebase() {
         super(State.FIELD_RELATIVE);
@@ -154,10 +162,6 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
                 br.getPosition()};
     }
 
-    public void convertToFieldRelative() {
-        inputSpeeds = inputSpeeds.toFieldRelativeSpeeds(gyro.getHeadingCW());
-    }
-
 
     public void setInputSpeeds(final double xVelocity, final double yVelocity,
             final double rVelocity) {
@@ -176,8 +180,17 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
             manuallySetModuleStates(0, 0, 0, 0);
         } else {
             if (mode.isTeleop()) {
-                inputSpeeds = inputSpeeds.times(speedSetting.speed);
-                convertToFieldRelative();
+                inputSpeeds = inputSpeeds.toFieldRelativeSpeeds(gyro.getHeadingCW())
+                        .times(speedSetting.speed);;
+
+                if (inputSpeeds.hasTranslationalVelocity() && !inputSpeeds.hasRotationalVelocity()
+                        && useRotationLock) {
+
+                    inputSpeeds.omegaRadiansPerSecond =
+                            rotationLock.calculate(gyro.getHeadingCW().getDegrees(), lastHeading);
+                } else if (inputSpeeds.hasRotationalVelocity()) {
+                    lastHeading = gyro.getHeadingCW().getDegrees();
+                }
             }
 
             swerveStates = kinematics.toSwerveModuleStates(inputSpeeds);
