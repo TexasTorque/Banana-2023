@@ -116,6 +116,8 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
 
     public SpeedSetting speedSetting = SpeedSetting.FAST;
 
+    public double ANGULAR_VELOCITY_COEFFICIENT = .085;
+
     private Drivebase() {
         super(State.FIELD_RELATIVE);
 
@@ -136,6 +138,7 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
             swerveStates[i] = new SwerveModuleState();
 
         SmartDashboard.putData("FIELD", fieldMap);
+        SmartDashboard.putNumber("Angular Velocity Coeff", ANGULAR_VELOCITY_COEFFICIENT);
     }
 
     @Override
@@ -154,21 +157,22 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
                 br.getPosition()};
     }
 
-    public void convertToFieldRelative() {
-        inputSpeeds = inputSpeeds.toFieldRelativeSpeeds(gyro.getHeadingCW());
-    }
-
-
     public void setInputSpeeds(final double xVelocity, final double yVelocity,
             final double rVelocity) {
         inputSpeeds = new TorqueSwerveSpeeds(xVelocity, yVelocity, rVelocity);
     }
 
+    public boolean rotationLock = true;
 
     @Override
     public final void update(final TorqueMode mode) {
         updateFeedback();
         Debug.log("State", desiredState.toString());
+
+        ANGULAR_VELOCITY_COEFFICIENT =
+                SmartDashboard.getNumber("Angular Velocity Coeff", ANGULAR_VELOCITY_COEFFICIENT);
+        SmartDashboard.putNumber("Gyro Angular Velocity", gyro.getAngularVelocity().getDegrees());
+
 
         if (desiredState == State.XF) {
             manuallySetModuleStates(0.79, 2.36, 2.36, 0.79);
@@ -176,8 +180,13 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
             manuallySetModuleStates(0, 0, 0, 0);
         } else {
             if (mode.isTeleop()) {
-                inputSpeeds = inputSpeeds.times(speedSetting.speed);
-                convertToFieldRelative();
+                inputSpeeds = inputSpeeds
+                        .toFieldRelativeSpeeds(gyro.getHeadingCW()
+                                .plus(rotationLock
+                                        ? gyro.getAngularVelocity()
+                                                .times(ANGULAR_VELOCITY_COEFFICIENT)
+                                        : new Rotation2d(0)))
+                        .times(elevator.isAtStow() ? speedSetting.speed : SpeedSetting.SLOW.speed);
             }
 
             swerveStates = kinematics.toSwerveModuleStates(inputSpeeds);
@@ -198,6 +207,7 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
         }
 
         desiredState = desiredState.parent;
+
         Debug.log("Speed Shift State", speedSetting.toString());
     }
 
