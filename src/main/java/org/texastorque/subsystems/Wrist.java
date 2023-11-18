@@ -17,6 +17,7 @@ public class Wrist extends TorqueStatorSubsystem<Wrist.State> implements Subsyst
     private static volatile Wrist instance;
 
     public static enum State implements TorqueState {
+        // Remove left or right
         UP(0), LEFT(5), RIGHT(1), DOWN(10), AUTO;
 
         double value;
@@ -40,6 +41,7 @@ public class Wrist extends TorqueStatorSubsystem<Wrist.State> implements Subsyst
     }
 
     public boolean seesTape() {
+        // Add TOAST HSV code here
         return false;
     }
 
@@ -56,6 +58,7 @@ public class Wrist extends TorqueStatorSubsystem<Wrist.State> implements Subsyst
         wrist.setConversionFactors(1, 1);
         wrist.configurePIDF(1, 0, 0, 0);
         wrist.setPIDFeedbackDevice(wrist.encoder);
+        wrist.setPIDVoltageLimits(0, 3);
         wrist.burnFlash();
 
         autoOrientWrist = new AutoOrientWrist();

@@ -172,6 +172,7 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
         ANGULAR_VELOCITY_COEFFICIENT =
                 SmartDashboard.getNumber("Angular Velocity Coeff", ANGULAR_VELOCITY_COEFFICIENT);
         SmartDashboard.putNumber("Gyro Angular Velocity", gyro.getAngularVelocity().getDegrees());
+        Debug.log("Rotation Lock", rotationLock);
 
 
         if (desiredState == State.XF) {
