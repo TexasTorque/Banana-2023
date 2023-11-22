@@ -14,8 +14,8 @@ public final class Input extends TorqueInput<TorqueController> implements Subsys
 
     private final static double DEADBAND = 0.125;
 
-    private final TorqueBoolSupplier resetGyro, speedDown, speedUp, rotationLock, stow, runIntake,
-            runOuttake, mid, high, wristUp, wristDown, wristLeft, wristRight, autoOrientWrist;
+    private final TorqueBoolSupplier resetGyro, speedDown, speedUp, rotationLock, goToIntake, runIntake,
+            runOuttake, mid, high, wristUp, wristDown, wristRight, autoOrientWrist;
 
     private final TorqueRequestableTimeout driverRumbleTimeout, operatorRumbleTimeout;
 
@@ -29,15 +29,14 @@ public final class Input extends TorqueInput<TorqueController> implements Subsys
         speedUp = new TorqueClickSupplier(driver::isRightBumperDown);
         rotationLock = new TorqueToggleSupplier(driver::isAButtonDown);
 
-        stow = new TorqueClickSupplier(operator::isAButtonDown);
-        runIntake = new TorqueClickSupplier(operator::isRightTriggerDown);
-        runOuttake = new TorqueClickSupplier(operator::isLeftTriggerDown);
+        goToIntake = new TorqueClickSupplier(operator::isAButtonDown);
+        runIntake = new TorqueBoolSupplier(operator::isRightTriggerDown);
+        runOuttake = new TorqueBoolSupplier(operator::isLeftTriggerDown);
         mid = new TorqueClickSupplier(operator::isBButtonDown);
         high = new TorqueClickSupplier(operator::isYButtonDown);
-        wristUp = new TorqueClickSupplier(operator::isDPADUpDown);
+        wristUp = new TorqueBoolSupplier(operator::isDPADUpDown);
         wristDown = new TorqueClickSupplier(operator::isDPADDownDown);
-        wristLeft = new TorqueClickSupplier(operator::isDPADLeftDown);
-        wristRight = new TorqueClickSupplier(operator::isDPADRightDown);
+        wristRight = new TorqueBoolSupplier(operator::isDPADRightDown);
         autoOrientWrist = new TorqueClickSupplier(operator::isXButtonDown);
 
         driverRumbleTimeout = new TorqueRequestableTimeout();
@@ -54,11 +53,10 @@ public final class Input extends TorqueInput<TorqueController> implements Subsys
     }
 
     public void updateWrist() {
-        wristUp.onTrue(() -> wrist.setState(Wrist.State.UP));
+        wristUp.onTrue(() -> wrist.setState(elevator.isAtState(Elevator.State.INTAKE) ? Wrist.State.ROTATE_UP : Wrist.State.UP));
+        wristRight.onTrue(() -> wrist.setState(elevator.isAtState(Elevator.State.INTAKE) ? Wrist.State.ROTATE_RIGHT : Wrist.State.RIGHT));
         wristDown.onTrue(() -> wrist.setState(Wrist.State.DOWN));
-        wristLeft.onTrue(() -> wrist.setState(Wrist.State.LEFT));
-        wristRight.onTrue(() -> wrist.setState(Wrist.State.RIGHT));
-        autoOrientWrist.onTrue(() -> wrist.setState(Wrist.State.AUTO));
+        autoOrientWrist.onTrue(() -> wrist.setState(Wrist.State.AUTO_ORIENT));
     }
 
     public void updateIntake() {
@@ -67,8 +65,7 @@ public final class Input extends TorqueInput<TorqueController> implements Subsys
     }
 
     public void updateElevator() {
-        stow.onTrue(() -> elevator.setState(Elevator.State.STOW));
-        runIntake.onTrue(() -> elevator.setState(Elevator.State.INTAKE));
+        goToIntake.onTrue(() -> elevator.setState(Elevator.State.INTAKE));
         mid.onTrue(() -> elevator.setState(Elevator.State.MID));
         high.onTrue(() -> elevator.setState(Elevator.State.HIGH));
     }

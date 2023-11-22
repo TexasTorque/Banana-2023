@@ -1,24 +1,30 @@
 package org.texastorque.subsystems;
 
+import java.util.function.BooleanSupplier;
 import org.texastorque.Debug;
 import org.texastorque.Ports;
 import org.texastorque.Subsystems;
 import org.texastorque.torquelib.auto.TorqueSequence;
 import org.texastorque.torquelib.auto.commands.TorqueRun;
+import org.texastorque.torquelib.auto.commands.TorqueRunWhile;
 import org.texastorque.torquelib.auto.commands.TorqueRunnableSwitch;
 import org.texastorque.torquelib.auto.commands.TorqueWaitTime;
+import org.texastorque.torquelib.auto.commands.TorqueWaitUntil;
 import org.texastorque.torquelib.base.TorqueMode;
 import org.texastorque.torquelib.base.TorqueState;
 import org.texastorque.torquelib.base.TorqueStatorSubsystem;
+import org.texastorque.torquelib.control.TorqueToggle;
 import org.texastorque.torquelib.motors.TorqueNEO;
+import org.texastorque.torquelib.util.TorqueMath;
 import com.revrobotics.CANSparkMax;
+import edu.wpi.first.math.controller.PIDController;
 
 public class Wrist extends TorqueStatorSubsystem<Wrist.State> implements Subsystems {
     private static volatile Wrist instance;
 
     public static enum State implements TorqueState {
         // Remove left or right
-        UP(0), LEFT(5), RIGHT(1), DOWN(10), AUTO;
+        UP(31), RIGHT(0), DOWN(-35), AUTO_ORIENT, ROTATE_UP, ROTATE_RIGHT;
 
         double value;
 
@@ -33,10 +39,20 @@ public class Wrist extends TorqueStatorSubsystem<Wrist.State> implements Subsyst
         public AutoOrientWrist() {
             addBlock(new TorqueRun(() -> wrist.setState(State.UP)));
             addBlock(new TorqueWaitTime((1)));
-            addBlock(new TorqueRunnableSwitch(wrist::seesTape,
-                    new TorqueRun(() -> wrist.setState(State.UP)),
-                    new TorqueRun(() -> wrist.setState(State.DOWN))));
+            // addBlock(new TorqueRunnableSwitch(wrist::seesTape,
+            // new TorqueRun(() -> wrist.setState(State.UP)),
+            // new TorqueRun(() -> wrist.setState(State.DOWN))));
 
+        }
+    }
+
+    public static final class AutoRotateWrist extends TorqueSequence implements Subsystems {
+        public AutoRotateWrist(State desired) {
+            addBlock(new TorqueRun(() -> elevator.setState(Elevator.State.SWAP_INTAKE)));
+            addBlock(new TorqueWaitUntil(() -> elevator.isAtState()));
+            addBlock(new TorqueRun(() -> wrist.setState(desired)));
+            addBlock(new TorqueWaitUntil(() -> wrist.isAtState()));
+            addBlock(new TorqueRun(() -> elevator.setState(Elevator.State.INTAKE)));
         }
     }
 
@@ -45,38 +61,75 @@ public class Wrist extends TorqueStatorSubsystem<Wrist.State> implements Subsyst
         return false;
     }
 
+    public boolean isAtState() {
+        return TorqueMath.toleranced(wrist.getPosition(), desiredState.value, .3);
+    }
+
+    public boolean isNotAtState() {
+        return !isAtState();
+    }
+
+    public boolean isAtState(State state) {
+        return TorqueMath.toleranced(wrist.getPosition(), state.value, .3);
+    }
+
     private TorqueNEO wrist;
+    private PIDController controller;
 
     private AutoOrientWrist autoOrientWrist;
 
+    private AutoRotateWrist autoRotateUp, autoRotateRight;
+
     public Wrist() {
-        super(State.UP);
+        super(State.RIGHT);
 
         wrist = new TorqueNEO(Ports.WRIST);
-        wrist.setBreakMode(true);
+        wrist.setBreakMode(false);
         wrist.setVoltageCompensation(12.6);
         wrist.setConversionFactors(1, 1);
-        wrist.configurePIDF(1, 0, 0, 0);
-        wrist.setPIDFeedbackDevice(wrist.encoder);
-        wrist.setPIDVoltageLimits(0, 3);
+
+        controller = new PIDController(1, 0, 0);
+
+        wrist.setCurrentLimit(20);
         wrist.burnFlash();
 
         autoOrientWrist = new AutoOrientWrist();
+        autoRotateUp = new AutoRotateWrist(State.UP);
+        autoRotateRight = new AutoRotateWrist(State.RIGHT);
     }
+
+
 
     @Override
     public void initialize(TorqueMode mode) {}
 
     @Override
     public void update(TorqueMode mode) {
-        if (desiredState == State.AUTO)
+        Debug.log("Wrist Early State", desiredState.toString());
+
+        if (desiredState == State.AUTO_ORIENT)
             autoOrientWrist.run();
+        else if (desiredState == State.ROTATE_UP)
+            autoRotateUp.run();
+        else if (desiredState == State.ROTATE_RIGHT)
+            autoRotateRight.run();
         else {
-            wrist.setPIDReference(desiredState.value, CANSparkMax.ControlType.kPosition);
             autoOrientWrist.reset();
+            autoRotateUp.reset();
+            autoRotateRight.reset();
         }
 
+        if (elevator.isAtState(Elevator.State.INTAKE) && desiredState == State.DOWN) 
+            desiredState = State.UP;
+
+
+        wrist.setVolts(controller.calculate(wrist.getPosition(), desiredState.value));
+
+
         Debug.log("Current Position", wrist.getPosition());
+        Debug.log("Wrist PID Volts", controller.calculate(wrist.getPosition(), desiredState.value));
+        Debug.log("Wrist State", desiredState.toString());
+        Debug.log("Wrist At State", isAtState());
     }
 
 

@@ -23,11 +23,14 @@ public class Intake extends TorqueStatorSubsystem<Intake.State> implements Subsy
         }
     }
 
-    private final double CURRENT_SPIKE = 5;
+    private final double CURRENT_SPIKE = 10;
 
     private final TorqueNEO rollers;
 
     private final TorqueRequestableTimeout spikeTimeout;
+
+    private boolean spiked = false;
+
 
     public Intake() {
         super(State.OFF);
@@ -42,10 +45,11 @@ public class Intake extends TorqueStatorSubsystem<Intake.State> implements Subsy
     @Override
     public void initialize(final TorqueMode mode) {}
 
+
     @Override
     public void update(final TorqueMode mode) {
         Debug.log("Rollers Current", rollers.getCurrent());
-        Debug.log("State", desiredState.toString());
+        Debug.log("Intake State", desiredState.toString());
 
 
         if (desiredState == State.INTAKE) {
@@ -53,12 +57,18 @@ public class Intake extends TorqueStatorSubsystem<Intake.State> implements Subsy
                 Input.getInstance().setDriverRumbleFor(.2);
                 Input.getInstance().setOperatorRumbleFor(.2);
                 desiredState = State.OFF;
+                spiked = true;
             }
-        } else
-            spikeTimeout.set(.2);
+        } else {
+            spikeTimeout.set(1);
+            spiked = false;
+        }
 
 
-        rollers.setVolts(desiredState.rollerSpeed);
+        if (spiked)
+            desiredState = State.OFF;
+
+        rollers.setVolts(-desiredState.rollerSpeed);
 
         if (mode.isTeleop())
             desiredState = State.OFF;

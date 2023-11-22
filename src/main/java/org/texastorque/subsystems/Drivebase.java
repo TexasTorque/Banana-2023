@@ -187,7 +187,7 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
                                         ? gyro.getAngularVelocity()
                                                 .times(ANGULAR_VELOCITY_COEFFICIENT)
                                         : new Rotation2d(0)))
-                        .times(elevator.isAtStow() ? speedSetting.speed : SpeedSetting.SLOW.speed);
+                        .times(elevator.isLowCG() ? speedSetting.speed : SpeedSetting.SLOW.speed);
             }
 
             swerveStates = kinematics.toSwerveModuleStates(inputSpeeds);
