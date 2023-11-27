@@ -4,3 +4,6 @@
 [submodule "vendordeps"]
 	path = vendordeps
 	url = https://github.com/texastorque/torquevendordeps
+[submodule "src/main/java/org/texastorque/toast"]
+	path = src/main/java/org/texastorque/toast
+	url = https://github.com/TexasTorque/TOAST
