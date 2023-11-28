@@ -14,7 +14,7 @@ public class Intake extends TorqueStatorSubsystem<Intake.State> implements Subsy
     private static volatile Intake instance;
 
     public static enum State implements TorqueState {
-        OFF(0), INTAKE(-5), OUTTAKE(12);
+        OFF(0), INTAKE(-12), OUTTAKE(2);
 
         public final double rollerSpeed;
 
@@ -23,7 +23,7 @@ public class Intake extends TorqueStatorSubsystem<Intake.State> implements Subsy
         }
     }
 
-    private final double CURRENT_SPIKE = 10;
+    private final double CURRENT_SPIKE = 20;
 
     private final TorqueNEO rollers;
 
@@ -38,7 +38,7 @@ public class Intake extends TorqueStatorSubsystem<Intake.State> implements Subsy
         rollers = new TorqueNEO(Ports.INTAKE_ROLLERS);
         rollers.setVoltageCompensation(12.6);
         rollers.setCurrentLimit(10);
-        rollers.setBreakMode(false);
+        rollers.setBreakMode(true);
         spikeTimeout = new TorqueRequestableTimeout();
     }
 

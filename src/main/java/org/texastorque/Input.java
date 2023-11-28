@@ -15,7 +15,7 @@ public final class Input extends TorqueInput<TorqueController> implements Subsys
     private final static double DEADBAND = 0.125;
 
     private final TorqueBoolSupplier resetGyro, speedDown, speedUp, rotationLock, goToIntake, runIntake,
-            runOuttake, mid, high, wristUp, wristDown, wristRight, autoOrientWrist;
+            runOuttake, mid, high, wristUp, wristDown, wristRight, useVision, dunk;
 
     private final TorqueRequestableTimeout driverRumbleTimeout, operatorRumbleTimeout;
 
@@ -28,16 +28,17 @@ public final class Input extends TorqueInput<TorqueController> implements Subsys
         speedDown = new TorqueClickSupplier(driver::isLeftBumperDown);
         speedUp = new TorqueClickSupplier(driver::isRightBumperDown);
         rotationLock = new TorqueToggleSupplier(driver::isAButtonDown);
+        useVision = new TorqueToggleSupplier(driver::isBButtonDown);
 
         goToIntake = new TorqueClickSupplier(operator::isAButtonDown);
         runIntake = new TorqueBoolSupplier(operator::isRightTriggerDown);
         runOuttake = new TorqueBoolSupplier(operator::isLeftTriggerDown);
         mid = new TorqueClickSupplier(operator::isBButtonDown);
         high = new TorqueClickSupplier(operator::isYButtonDown);
+        dunk = new TorqueClickSupplier(operator::isXButtonDown);
         wristUp = new TorqueBoolSupplier(operator::isDPADUpDown);
         wristDown = new TorqueClickSupplier(operator::isDPADDownDown);
         wristRight = new TorqueBoolSupplier(operator::isDPADRightDown);
-        autoOrientWrist = new TorqueClickSupplier(operator::isXButtonDown);
 
         driverRumbleTimeout = new TorqueRequestableTimeout();
         operatorRumbleTimeout = new TorqueRequestableTimeout();
@@ -55,8 +56,7 @@ public final class Input extends TorqueInput<TorqueController> implements Subsys
     public void updateWrist() {
         wristUp.onTrue(() -> wrist.setState(elevator.isAtState(Elevator.State.INTAKE) ? Wrist.State.ROTATE_UP : Wrist.State.UP));
         wristRight.onTrue(() -> wrist.setState(elevator.isAtState(Elevator.State.INTAKE) ? Wrist.State.ROTATE_RIGHT : Wrist.State.RIGHT));
-        wristDown.onTrue(() -> wrist.setState(Wrist.State.DOWN));
-        autoOrientWrist.onTrue(() -> wrist.setState(Wrist.State.AUTO_ORIENT));
+        wristDown.onTrue(() -> wrist.setState(elevator.isAtState(Elevator.State.INTAKE) ? Wrist.State.UP : Wrist.State.DOWN));
     }
 
     public void updateIntake() {
@@ -68,12 +68,14 @@ public final class Input extends TorqueInput<TorqueController> implements Subsys
         goToIntake.onTrue(() -> elevator.setState(Elevator.State.INTAKE));
         mid.onTrue(() -> elevator.setState(Elevator.State.MID));
         high.onTrue(() -> elevator.setState(Elevator.State.HIGH));
+        dunk.onTrue(() -> elevator.setState(elevator.isAtMid() ? Elevator.State.MID_DUNK : Elevator.State.HIGH_DUNK));
     }
 
     public void updateDrivebase() {
         resetGyro.onTrue(() -> drivebase.resetGyro());
         speedDown.onTrue(() -> drivebase.speedSetting.shiftDown());
         speedUp.onTrue(() -> drivebase.speedSetting.shiftUp());
+        drivebase.useVision = !useVision.get();
 
         drivebase.rotationLock = rotationLock.get();
 
