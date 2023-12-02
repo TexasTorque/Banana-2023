@@ -54,9 +54,9 @@ public final class Input extends TorqueInput<TorqueController> implements Subsys
     }
 
     public void updateWrist() {
-        wristUp.onTrue(() -> wrist.setState(elevator.isAtState(Elevator.State.INTAKE) ? Wrist.State.ROTATE_UP : Wrist.State.UP));
-        wristRight.onTrue(() -> wrist.setState(elevator.isAtState(Elevator.State.INTAKE) ? Wrist.State.ROTATE_RIGHT : Wrist.State.RIGHT));
-        wristDown.onTrue(() -> wrist.setState(elevator.isAtState(Elevator.State.INTAKE) ? Wrist.State.UP : Wrist.State.DOWN));
+        wristUp.onTrue(() -> wrist.setState(elevator.isAtIntake() ? Wrist.State.ROTATE_UP : Wrist.State.UP));
+        wristRight.onTrue(() -> wrist.setState(elevator.isAtIntake() ? Wrist.State.ROTATE_RIGHT : Wrist.State.RIGHT));
+        wristDown.onTrue(() -> wrist.setState(elevator.isAtIntake() ? Wrist.State.UP : Wrist.State.DOWN));
     }
 
     public void updateIntake() {
@@ -69,15 +69,16 @@ public final class Input extends TorqueInput<TorqueController> implements Subsys
         mid.onTrue(() -> elevator.setState(Elevator.State.MID));
         high.onTrue(() -> elevator.setState(Elevator.State.HIGH));
         dunk.onTrue(() -> elevator.setState(elevator.isAtMid() ? Elevator.State.MID_DUNK : Elevator.State.HIGH_DUNK));
+        elevator.setOperatorAdjustment(operator.getLeftYAxis());
     }
 
     public void updateDrivebase() {
         resetGyro.onTrue(() -> drivebase.resetGyro());
         speedDown.onTrue(() -> drivebase.speedSetting.shiftDown());
         speedUp.onTrue(() -> drivebase.speedSetting.shiftUp());
-        drivebase.useVision = !useVision.get();
 
-        drivebase.rotationLock = rotationLock.get();
+        drivebase.useVision = !useVision.get();
+        drivebase.rotationLock = !rotationLock.get();
 
         final double xVelocity = TorqueMath.scaledLinearDeadband(driver.getLeftYAxis(), DEADBAND)
                 * Drivebase.MAX_VELOCITY_TELEOP;
