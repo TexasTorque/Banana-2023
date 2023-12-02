@@ -1,9 +1,11 @@
 package org.texastorque;
 
-import org.texastorque.subsystems.Drivebase;
+import org.texastorque.subsystems.*;
 import org.texastorque.torquelib.base.TorqueInput;
 import org.texastorque.torquelib.control.TorqueBoolSupplier;
 import org.texastorque.torquelib.control.TorqueClickSupplier;
+import org.texastorque.torquelib.control.TorqueRequestableTimeout;
+import org.texastorque.torquelib.control.TorqueToggleSupplier;
 import org.texastorque.torquelib.sensors.TorqueController;
 import org.texastorque.torquelib.util.TorqueMath;
 
@@ -12,7 +14,11 @@ public final class Input extends TorqueInput<TorqueController> implements Subsys
 
     private final static double DEADBAND = 0.125;
 
-    private final TorqueBoolSupplier resetGyro, speedDown, speedUp;
+    private final TorqueBoolSupplier resetGyro, speedDown, speedUp, rotationLock, goToIntake, runIntake,
+            runOuttake, mid, high, wristUp, wristDown, wristRight, useVision, dunk;
+
+    private final TorqueRequestableTimeout driverRumbleTimeout, operatorRumbleTimeout;
+
 
     private Input() {
         driver = new TorqueController(0, 0.1);
@@ -21,17 +27,58 @@ public final class Input extends TorqueInput<TorqueController> implements Subsys
         resetGyro = new TorqueClickSupplier(driver::isRightCenterButtonDown);
         speedDown = new TorqueClickSupplier(driver::isLeftBumperDown);
         speedUp = new TorqueClickSupplier(driver::isRightBumperDown);
+        rotationLock = new TorqueToggleSupplier(driver::isAButtonDown);
+        useVision = new TorqueToggleSupplier(driver::isBButtonDown);
+
+        goToIntake = new TorqueClickSupplier(operator::isAButtonDown);
+        runIntake = new TorqueBoolSupplier(operator::isRightTriggerDown);
+        runOuttake = new TorqueBoolSupplier(operator::isLeftTriggerDown);
+        mid = new TorqueClickSupplier(operator::isBButtonDown);
+        high = new TorqueClickSupplier(operator::isYButtonDown);
+        dunk = new TorqueClickSupplier(operator::isXButtonDown);
+        wristUp = new TorqueBoolSupplier(operator::isDPADUpDown);
+        wristDown = new TorqueClickSupplier(operator::isDPADDownDown);
+        wristRight = new TorqueBoolSupplier(operator::isDPADRightDown);
+
+        driverRumbleTimeout = new TorqueRequestableTimeout();
+        operatorRumbleTimeout = new TorqueRequestableTimeout();
     }
 
     @Override
     public final void update() {
+        updateWrist();
+        updateIntake();
+        updateElevator();
         updateDrivebase();
+        updateRumble();
+    }
+
+    public void updateWrist() {
+        wristUp.onTrue(() -> wrist.setState(elevator.isAtIntake() ? Wrist.State.ROTATE_UP : Wrist.State.UP));
+        wristRight.onTrue(() -> wrist.setState(elevator.isAtIntake() ? Wrist.State.ROTATE_RIGHT : Wrist.State.RIGHT));
+        wristDown.onTrue(() -> wrist.setState(elevator.isAtIntake() ? Wrist.State.UP : Wrist.State.DOWN));
+    }
+
+    public void updateIntake() {
+        runIntake.onTrue(() -> intake.setState(Intake.State.INTAKE));
+        runOuttake.onTrue(() -> intake.setState(Intake.State.OUTTAKE));
+    }
+
+    public void updateElevator() {
+        goToIntake.onTrue(() -> elevator.setState(Elevator.State.INTAKE));
+        mid.onTrue(() -> elevator.setState(Elevator.State.MID));
+        high.onTrue(() -> elevator.setState(Elevator.State.HIGH));
+        dunk.onTrue(() -> elevator.setState(elevator.isAtMid() ? Elevator.State.MID_DUNK : Elevator.State.HIGH_DUNK));
+        elevator.setOperatorAdjustment(operator.getLeftYAxis());
     }
 
     public void updateDrivebase() {
         resetGyro.onTrue(() -> drivebase.resetGyro());
         speedDown.onTrue(() -> drivebase.speedSetting.shiftDown());
         speedUp.onTrue(() -> drivebase.speedSetting.shiftUp());
+
+        drivebase.useVision = !useVision.get();
+        drivebase.rotationLock = !rotationLock.get();
 
         final double xVelocity = TorqueMath.scaledLinearDeadband(driver.getLeftYAxis(), DEADBAND)
                 * Drivebase.MAX_VELOCITY_TELEOP;
@@ -42,6 +89,19 @@ public final class Input extends TorqueInput<TorqueController> implements Subsys
                         * Drivebase.MAX_ANGULAR_VELOCITY;
 
         drivebase.setInputSpeeds(xVelocity, yVelocity, rotationVelocity);
+    }
+
+    public void updateRumble() {
+        driver.setRumble(driverRumbleTimeout.get());
+        operator.setRumble(operatorRumbleTimeout.get());
+    }
+
+    public void setDriverRumbleFor(final double duration) {
+        driverRumbleTimeout.set(duration);
+    }
+
+    public void setOperatorRumbleFor(final double duration) {
+        operatorRumbleTimeout.set(duration);
     }
 
     public static final synchronized Input getInstance() {

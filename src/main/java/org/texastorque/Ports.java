@@ -7,4 +7,10 @@ public final class Ports {
     public static final SwervePorts FR_MOD = new SwervePorts(4, 3, 9);
     public static final SwervePorts BR_MOD = new SwervePorts(6, 5, 10);
     public static final SwervePorts BL_MOD = new SwervePorts(8, 7, 12);
+
+    public static final int ELEVATOR = 15;
+    public static final int WRIST = 13;
+    public static final int INTAKE_ROLLERS = 14;
+
+    public static final int LIGHTS_SUPERSTRUCTURE = 0;
 }
