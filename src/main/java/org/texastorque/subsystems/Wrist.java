@@ -81,10 +81,10 @@ public class Wrist extends TorqueStatorSubsystem<Wrist.State> implements Subsyst
         Debug.log("Rotate Wrist Up Ended", rotateUp.hasEnded());
         Debug.log("Rotate Wrist Right Ended", rotateRight.hasEnded());
 
-        if (!rotateRight.hasEnded())
-            desiredState = State.ROTATE_RIGHT;
-        else if (!rotateUp.hasEnded())
-            desiredState = State.ROTATE_UP;
+        // if (!rotateRight.hasEnded())
+        //     desiredState = State.ROTATE_RIGHT;
+        // else if (!rotateUp.hasEnded())
+        //     desiredState = State.ROTATE_UP;
 
         if (desiredState == State.ROTATE_UP)
             rotateUp.run();

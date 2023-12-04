@@ -102,7 +102,7 @@ public class Elevator extends TorqueStatorSubsystem<Elevator.State> implements S
     }
 
     public boolean isAtIntake() {
-        return desiredState == State.INTAKE || desiredState ==State.SWAP_INTAKE;
+        return desiredState == State.INTAKE || desiredState == State.SWAP_INTAKE;
     }
 
     public static synchronized final Elevator getInstance() {
