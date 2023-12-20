@@ -5,8 +5,8 @@ import org.texastorque.torquelib.base.TorqueInput;
 import org.texastorque.torquelib.control.TorqueBoolSupplier;
 import org.texastorque.torquelib.control.TorqueClickSupplier;
 import org.texastorque.torquelib.control.TorqueRequestableTimeout;
-import org.texastorque.torquelib.control.TorqueToggleSupplier;
 import org.texastorque.torquelib.sensors.TorqueController;
+import org.texastorque.torquelib.swerve.TorqueSwerveSpeeds;
 import org.texastorque.torquelib.util.TorqueMath;
 
 public final class Input extends TorqueInput<TorqueController> implements Subsystems {
@@ -14,21 +14,20 @@ public final class Input extends TorqueInput<TorqueController> implements Subsys
 
     private final static double DEADBAND = 0.125;
 
-    private final TorqueBoolSupplier resetGyro, speedDown, speedUp, rotationLock, goToIntake, runIntake,
-            runOuttake, mid, high, wristUp, wristDown, wristRight, useVision, dunk;
+    private final TorqueBoolSupplier resetGyro, speedDown, speedUp, goToIntake,
+            runIntake, runOuttake, mid, high, wristUp, wristDown, wristRight, dunk,
+            swapIntake, bucketAlign;
 
     private final TorqueRequestableTimeout driverRumbleTimeout, operatorRumbleTimeout;
 
-
     private Input() {
-        driver = new TorqueController(0, 0.1);
-        operator = new TorqueController(1, 0.1);
+        driver = new TorqueController(0, DEADBAND);
+        operator = new TorqueController(1, DEADBAND);
 
         resetGyro = new TorqueClickSupplier(driver::isRightCenterButtonDown);
         speedDown = new TorqueClickSupplier(driver::isLeftBumperDown);
         speedUp = new TorqueClickSupplier(driver::isRightBumperDown);
-        rotationLock = new TorqueToggleSupplier(driver::isAButtonDown);
-        useVision = new TorqueToggleSupplier(driver::isBButtonDown);
+        bucketAlign = new TorqueBoolSupplier(driver::isAButtonDown);
 
         goToIntake = new TorqueClickSupplier(operator::isAButtonDown);
         runIntake = new TorqueBoolSupplier(operator::isRightTriggerDown);
@@ -39,6 +38,7 @@ public final class Input extends TorqueInput<TorqueController> implements Subsys
         wristUp = new TorqueBoolSupplier(operator::isDPADUpDown);
         wristDown = new TorqueClickSupplier(operator::isDPADDownDown);
         wristRight = new TorqueBoolSupplier(operator::isDPADRightDown);
+        swapIntake = new TorqueClickSupplier(operator::isRightBumperDown);
 
         driverRumbleTimeout = new TorqueRequestableTimeout();
         operatorRumbleTimeout = new TorqueRequestableTimeout();
@@ -54,9 +54,9 @@ public final class Input extends TorqueInput<TorqueController> implements Subsys
     }
 
     public void updateWrist() {
-        wristUp.onTrue(() -> wrist.setState(elevator.isAtState(Elevator.State.INTAKE) ? Wrist.State.ROTATE_UP : Wrist.State.UP));
-        wristRight.onTrue(() -> wrist.setState(elevator.isAtState(Elevator.State.INTAKE) ? Wrist.State.ROTATE_RIGHT : Wrist.State.RIGHT));
-        wristDown.onTrue(() -> wrist.setState(elevator.isAtState(Elevator.State.INTAKE) ? Wrist.State.UP : Wrist.State.DOWN));
+        wristUp.onTrue(() -> wrist.setState(elevator.tooLow() ? Wrist.State.ROTATE_UP : Wrist.State.UP));
+        wristRight.onTrue(() -> wrist.setState(elevator.tooLow() ? Wrist.State.ROTATE_RIGHT : Wrist.State.RIGHT));
+        wristDown.onTrue(() -> wrist.setState(elevator.tooLow() ? Wrist.State.ROTATE_UP : Wrist.State.DOWN));
     }
 
     public void updateIntake() {
@@ -69,25 +69,23 @@ public final class Input extends TorqueInput<TorqueController> implements Subsys
         mid.onTrue(() -> elevator.setState(Elevator.State.MID));
         high.onTrue(() -> elevator.setState(Elevator.State.HIGH));
         dunk.onTrue(() -> elevator.setState(elevator.isAtMid() ? Elevator.State.MID_DUNK : Elevator.State.HIGH_DUNK));
+        swapIntake.onTrue(() -> elevator.setState(Elevator.State.SWAP_INTAKE));
     }
 
     public void updateDrivebase() {
         resetGyro.onTrue(() -> drivebase.resetGyro());
         speedDown.onTrue(() -> drivebase.speedSetting.shiftDown());
         speedUp.onTrue(() -> drivebase.speedSetting.shiftUp());
-        drivebase.useVision = !useVision.get();
-
-        drivebase.rotationLock = rotationLock.get();
+        bucketAlign.onTrue(() -> drivebase.setState(Drivebase.State.BUCKET_ALIGN));
 
         final double xVelocity = TorqueMath.scaledLinearDeadband(driver.getLeftYAxis(), DEADBAND)
-                * Drivebase.MAX_VELOCITY_TELEOP;
+                * Drivebase.MAX_VELOCITY;
         final double yVelocity = TorqueMath.scaledLinearDeadband(driver.getLeftXAxis(), DEADBAND)
-                * Drivebase.MAX_VELOCITY_TELEOP;
-        final double rotationVelocity =
-                TorqueMath.scaledLinearDeadband(driver.getRightXAxis(), DEADBAND)
-                        * Drivebase.MAX_ANGULAR_VELOCITY;
+                * Drivebase.MAX_VELOCITY;
+        final double rotationVelocity = TorqueMath.scaledLinearDeadband(driver.getRightXAxis(), DEADBAND)
+                * Drivebase.MAX_ANGULAR_VELOCITY;
 
-        drivebase.setInputSpeeds(xVelocity, yVelocity, rotationVelocity);
+        drivebase.inputSpeeds = new TorqueSwerveSpeeds(xVelocity, yVelocity, rotationVelocity);
     }
 
     public void updateRumble() {

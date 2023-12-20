@@ -23,14 +23,13 @@ public class Intake extends TorqueStatorSubsystem<Intake.State> implements Subsy
         }
     }
 
-    private final double CURRENT_SPIKE = 20;
+    private final double CURRENT_SPIKE = 25;
 
     private final TorqueNEO rollers;
 
     private final TorqueRequestableTimeout spikeTimeout;
 
     private boolean spiked = false;
-
 
     public Intake() {
         super(State.OFF);
@@ -43,14 +42,13 @@ public class Intake extends TorqueStatorSubsystem<Intake.State> implements Subsy
     }
 
     @Override
-    public void initialize(final TorqueMode mode) {}
-
+    public void initialize(final TorqueMode mode) {
+    }
 
     @Override
     public void update(final TorqueMode mode) {
         Debug.log("Rollers Current", rollers.getCurrent());
         Debug.log("Intake State", desiredState.toString());
-
 
         if (desiredState == State.INTAKE) {
             if (!spikeTimeout.get() && rollers.getCurrent() >= (CURRENT_SPIKE)) {
@@ -64,7 +62,6 @@ public class Intake extends TorqueStatorSubsystem<Intake.State> implements Subsy
             spiked = false;
         }
 
-
         if (spiked)
             desiredState = State.OFF;
 
@@ -72,6 +69,7 @@ public class Intake extends TorqueStatorSubsystem<Intake.State> implements Subsy
 
         if (mode.isTeleop())
             desiredState = State.OFF;
+
     }
 
     public static synchronized final Intake getInstance() {

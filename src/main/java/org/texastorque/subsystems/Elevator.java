@@ -13,7 +13,7 @@ public class Elevator extends TorqueStatorSubsystem<Elevator.State> implements S
     private static volatile Elevator instance;
 
     public static enum State implements TorqueState {
-        INTAKE(.5), SWAP_INTAKE(30), MID(450), MID_DUNK(350), HIGH(795), HIGH_DUNK(700);
+        INTAKE(0.5), SWAP_INTAKE(40), MID(450), MID_DUNK(350), HIGH(795), HIGH_DUNK(700);
 
         private final double MIN_HEIGHT = 0.5, MAX_HEIGHT = 800;
 
@@ -40,8 +40,7 @@ public class Elevator extends TorqueStatorSubsystem<Elevator.State> implements S
     }
 
     @Override
-    public void initialize(TorqueMode mode) {
-    }
+    public void initialize(TorqueMode mode) {}
 
     @Override
     public void update(TorqueMode mode) {
@@ -53,6 +52,8 @@ public class Elevator extends TorqueStatorSubsystem<Elevator.State> implements S
         Debug.log("Current Height", elevator.getPosition());
         Debug.log("Desired Height", desiredState.height);
         Debug.log("Elevator State", desiredState.toString());
+        Debug.log("Too Low", tooLow());
+        Debug.log("isAtState", isAtState());
     }
 
     public boolean isLowCG() {
@@ -69,6 +70,10 @@ public class Elevator extends TorqueStatorSubsystem<Elevator.State> implements S
 
     public boolean isAtMid() {
         return isAtState(State.MID) || isAtState(State.MID_DUNK);
+    }
+
+    public boolean tooLow() {
+        return elevator.getPosition() < 85;
     }
 
     public static synchronized final Elevator getInstance() {

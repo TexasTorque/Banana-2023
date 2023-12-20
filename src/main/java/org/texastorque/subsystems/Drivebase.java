@@ -7,12 +7,11 @@
 package org.texastorque.subsystems;
 
 import org.texastorque.Debug;
-import org.texastorque.Field;
 import org.texastorque.Ports;
 import org.texastorque.Subsystems;
 import org.texastorque.toast.lib.Camera;
 import org.texastorque.toast.lib.Toast;
-import org.texastorque.toast.lib.pipelines.AprilTags;
+import org.texastorque.toast.lib.pipelines.ObjectDetector;
 import org.texastorque.torquelib.base.TorqueMode;
 import org.texastorque.torquelib.base.TorqueState;
 import org.texastorque.torquelib.base.TorqueStatorSubsystem;
@@ -20,7 +19,9 @@ import org.texastorque.torquelib.sensors.TorqueNavXGyro;
 import org.texastorque.torquelib.swerve.TorqueSwerveSpeeds;
 import org.texastorque.torquelib.swerve.TorqueSwerveX;
 import edu.wpi.first.math.VecBuilder;
+import org.texastorque.Field;
 import edu.wpi.first.math.Vector;
+import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.estimator.SwerveDrivePoseEstimator;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
@@ -30,13 +31,13 @@ import edu.wpi.first.math.kinematics.SwerveModulePosition;
 import edu.wpi.first.math.kinematics.SwerveModuleState;
 import edu.wpi.first.math.numbers.N3;
 import edu.wpi.first.math.util.Units;
-import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.smartdashboard.Field2d;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
 public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> implements Subsystems {
     public static enum State implements TorqueState {
-        FIELD_RELATIVE(null), ROBOT_RELATIVE(null), XF(FIELD_RELATIVE), ZERO(FIELD_RELATIVE);
+        FIELD_RELATIVE(null), ROBOT_RELATIVE(null), XF(FIELD_RELATIVE), ZERO(
+                FIELD_RELATIVE), BUCKET_ALIGN(ROBOT_RELATIVE);
 
         public final State parent;
 
@@ -72,25 +73,22 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
     public static final Pose2d INITIAL_POS = new Pose2d(0, 0, Rotation2d.fromRadians(0));
 
     /**
-     * Standard deviations of model states. Increase these numbers to trust your
-     * model's state
-     * estimates less. This matrix is in the form [x, y, theta]ᵀ, with units in
-     * meters and radians,
+     * Standard deviations of model states. Increase these numbers to trust your model's state
+     * estimates less. This matrix is in the form [x, y, theta]ᵀ, with units in meters and radians,
      * then meters.
      */
-    private static final Vector<N3> STATE_STDS = VecBuilder.fill(0.05, 0.05, Units.degreesToRadians(5));
+    private static final Vector<N3> STATE_STDS =
+            VecBuilder.fill(0.05, 0.05, Units.degreesToRadians(5));
 
     /**
-     * Standard deviations of the vision measurements. Increase these numbers to
-     * trust global
-     * measurements from vision less. This matrix is in the form [x, y, theta]ᵀ,
-     * with units in
+     * Standard deviations of the vision measurements. Increase these numbers to trust global
+     * measurements from vision less. This matrix is in the form [x, y, theta]ᵀ, with units in
      * meters and radians.
      */
-    private static final Vector<N3> VISION_STDS = VecBuilder.fill(0.1, 0.1, Units.degreesToRadians(10));
+    private static final Vector<N3> VISION_STDS =
+            VecBuilder.fill(0.1, 0.1, Units.degreesToRadians(10));
 
-    public final static double MAX_VELOCITY_TELEOP = 4.6, MAX_ACCELERATION = 2,
-            MAX_ANGULAR_VELOCITY = 6;
+    public final static double MAX_VELOCITY = 5, MAX_ANGULAR_VELOCITY = 8;
 
     public static SwerveModulePosition invertSwerveModuleDistance(final SwerveModulePosition pose) {
         return new SwerveModulePosition(-pose.distanceMeters, pose.angle);
@@ -106,7 +104,6 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
             LOC_BR = new Translation2d(-WIDTH / 2, -WIDTH / 2);
 
     private final SwerveDriveKinematics kinematics;
-
     private final SwerveDrivePoseEstimator poseEstimator;
 
     public final Field2d fieldMap = new Field2d();
@@ -117,13 +114,15 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
 
     private SwerveModuleState[] swerveStates;
 
-    // public final Toast toast;
-
-    public TorqueSwerveSpeeds inputSpeeds;
+    public TorqueSwerveSpeeds inputSpeeds = new TorqueSwerveSpeeds(0, 0, 0);
 
     public SpeedSetting speedSetting = SpeedSetting.FAST;
 
-    public double ANGULAR_VELOCITY_COEFFICIENT = .085;
+    public final double GYRO_COEFF = 0.2;
+
+    public final Toast toast;
+
+    public final PIDController bucketAlignPID;
 
     private Drivebase() {
         super(State.FIELD_RELATIVE);
@@ -133,28 +132,29 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
         bl = new TorqueSwerveX("Back Left", Ports.BL_MOD, 0.6841);
         br = new TorqueSwerveX("Back Right", Ports.BR_MOD, -0.66280);
 
-        inputSpeeds = new TorqueSwerveSpeeds(0, 0, 0);
 
         kinematics = new SwerveDriveKinematics(LOC_FL, LOC_FR, LOC_BL, LOC_BR);
 
-        poseEstimator = new SwerveDrivePoseEstimator(kinematics, gyro.getHeadingCW(),
+        poseEstimator = new SwerveDrivePoseEstimator(kinematics, gyro.getHeadingCCW(),
                 getModulePositions(), INITIAL_POS, STATE_STDS, VISION_STDS);
 
         swerveStates = new SwerveModuleState[4];
         for (int i = 0; i < swerveStates.length; i++)
             swerveStates[i] = new SwerveModuleState();
 
+        toast = new Toast(Field.getCurrentFieldLayout());
+
+        toast.addCamera(new Camera("fl", Camera.transformInchDeg(0, 0, 0, 0)));
+
+        toast.iterCams(cam -> cam.addPipeline(new ObjectDetector()));
+
         SmartDashboard.putData("FIELD", fieldMap);
-        SmartDashboard.putNumber("Angular Velocity Coeff", ANGULAR_VELOCITY_COEFFICIENT);
 
-        // toast = new Toast(Field.getCurrentFieldLayout());
+        bucketAlignPID = new PIDController(1, 0, 0);
+    }
 
-        // toast.addCamera(new Camera("fl", Camera.transformInchDeg(0, 0, 0, 0, 51, 0)));
-        // toast.addCamera(new Camera("ll", Camera.transformInchDeg(0, 0, 0, 0, 51, 0)));
-        // toast.addCamera(new Camera("bl", Camera.transformInchDeg(0, 0, 0, 0, 51, 0)));
-        // toast.addCamera(new Camera("rl", Camera.transformInchDeg(0, 0, 0, 0, 51, 0)));
-
-        // toast.iterCams(cam -> cam.addPipeline(new AprilTags()));
+    public boolean isState(State state) {
+        return desiredState == state;
     }
 
     @Override
@@ -169,26 +169,18 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
     }
 
     public SwerveModulePosition[] getModulePositions() {
-        return new SwerveModulePosition[] { invertSwerveModuleDistance(fl.getPosition()),
+        return new SwerveModulePosition[] {invertSwerveModuleDistance(fl.getPosition()),
                 invertSwerveModuleDistance(fr.getPosition()),
-                invertSwerveModuleDistance(bl.getPosition()), invertSwerveModuleDistance(br.getPosition()) };
+                invertSwerveModuleDistance(bl.getPosition()),
+                invertSwerveModuleDistance(br.getPosition())};
     }
 
-    public void setInputSpeeds(final double xVelocity, final double yVelocity,
-            final double rVelocity) {
-        inputSpeeds = new TorqueSwerveSpeeds(xVelocity, yVelocity, rVelocity);
-    }
-
-    public boolean rotationLock = true;
 
     @Override
     public final void update(final TorqueMode mode) {
         updateFeedback();
         Debug.log("State", desiredState.toString());
 
-        ANGULAR_VELOCITY_COEFFICIENT = SmartDashboard.getNumber("Angular Velocity Coeff", ANGULAR_VELOCITY_COEFFICIENT);
-        SmartDashboard.putNumber("Gyro Angular Velocity", gyro.getAngularVelocity().getDegrees());
-        Debug.log("Rotation Lock", rotationLock);
 
         if (desiredState == State.XF) {
             manuallySetModuleStates(0.79, 2.36, 2.36, 0.79);
@@ -197,17 +189,25 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
         } else {
             if (mode.isTeleop()) {
                 inputSpeeds = inputSpeeds
-                        .toFieldRelativeSpeeds(gyro.getHeadingCW()
-                                .plus(rotationLock
-                                        ? gyro.getAngularVelocity()
-                                                .times(ANGULAR_VELOCITY_COEFFICIENT)
-                                        : new Rotation2d(0)))
-                        .times(elevator.isLowCG() ? speedSetting.speed : SpeedSetting.SLOW.speed);
+                        .times(!elevator.tooLow() ? SpeedSetting.SLOW.speed : speedSetting.speed);
+
+                inputSpeeds = inputSpeeds.toFieldRelativeSpeeds(gyro.getHeadingCCW());
+                // .plus(gyro.getAngularVelocity().times(GYRO_COEFF)));
+            }
+
+            if (desiredState == State.BUCKET_ALIGN) {
+                ObjectDetector objd = (ObjectDetector) (toast.getCamera("fl").get().getPipe(new ObjectDetector().getClass()));
+                double centerX = objd.getBestObject().getCenterX();
+                inputSpeeds.omegaRadiansPerSecond = bucketAlignPID.calculate(centerX, 0);
+                inputSpeeds.vxMetersPerSecond = 0;
+                inputSpeeds.vyMetersPerSecond = 0;
+
+                Debug.log("centerX", centerX);
             }
 
             swerveStates = kinematics.toSwerveModuleStates(inputSpeeds);
 
-            SwerveDriveKinematics.desaturateWheelSpeeds(swerveStates, MAX_VELOCITY_TELEOP);
+            SwerveDriveKinematics.desaturateWheelSpeeds(swerveStates, MAX_VELOCITY);
 
             if (inputSpeeds.hasZeroVelocity()) {
                 manuallySetModuleStates(swerveStates[0].angle.getRadians(),
@@ -225,37 +225,20 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
         desiredState = desiredState.parent;
 
         Debug.log("Speed Shift State", speedSetting.toString());
+        Debug.log("gyro", gyro.getHeadingCCW().getDegrees());
     }
 
     public void resetGyro() {
         gyro.setOffsetCW(Rotation2d.fromRadians(0));
-        poseEstimator.resetPosition(gyro.getHeadingCW(), getModulePositions(), INITIAL_POS);
+        poseEstimator.resetPosition(gyro.getHeadingCCW(), getModulePositions(), INITIAL_POS);
     }
-
-    public void resetPose(final Pose2d pose) {
-        poseEstimator.resetPosition(gyro.getHeadingCW(), getModulePositions(), pose);
-    }
-
-    public Pose2d getPose() {
-        return poseEstimator.getEstimatedPosition();
-    }
-
-    public boolean useVision = true;
 
     private void updateFeedback() {
-        // if (useVision)
-            // toast.update(poseEstimator::addVisionMeasurement);
-
-        poseEstimator.update(gyro.getHeadingCW(), getModulePositions());
+        poseEstimator.update(gyro.getHeadingCCW(), getModulePositions());
 
         fieldMap.setRobotPose(poseEstimator.getEstimatedPosition());
 
-        fieldMap.setRobotPose(DriverStation.getAlliance() == DriverStation.Alliance.Blue
-                ? poseEstimator.getEstimatedPosition()
-                : Field.reflectPosition(poseEstimator.getEstimatedPosition()));
-
         Debug.log("Current Robot Pose", poseEstimator.getEstimatedPosition().toString());
-        Debug.log("Use Vision", useVision);
     }
 
     private void manuallySetModuleStates(final double flAngle, final double frAngle,
@@ -265,5 +248,4 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
         bl.setDesiredState(new SwerveModuleState(0, Rotation2d.fromRadians(blAngle)));
         br.setDesiredState(new SwerveModuleState(0, Rotation2d.fromRadians(brAngle)));
     }
-
 }
