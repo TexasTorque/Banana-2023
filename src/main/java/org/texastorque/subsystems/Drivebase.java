@@ -10,6 +10,9 @@ import org.texastorque.Debug;
 import org.texastorque.Field;
 import org.texastorque.Ports;
 import org.texastorque.Subsystems;
+import org.texastorque.toast.lib.Camera;
+import org.texastorque.toast.lib.Toast;
+import org.texastorque.toast.lib.pipelines.AprilTags;
 import org.texastorque.torquelib.base.TorqueMode;
 import org.texastorque.torquelib.base.TorqueState;
 import org.texastorque.torquelib.base.TorqueStatorSubsystem;
@@ -114,7 +117,7 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
 
     private SwerveModuleState[] swerveStates;
 
-    // public final Toast toast;
+    public final Toast toast;
 
     public TorqueSwerveSpeeds inputSpeeds;
 
@@ -144,14 +147,26 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
         SmartDashboard.putData("FIELD", fieldMap);
         SmartDashboard.putNumber("Angular Velocity Coeff", ANGULAR_VELOCITY_COEFFICIENT);
 
-        // toast = new Toast(Field.getCurrentFieldLayout());
+        toast = new Toast(Field.getCurrentFieldLayout());
 
-        // toast.addCamera(new Camera("fl", Camera.transformInchDeg(0, 0, 0, 0, 51, 0)));
-        // toast.addCamera(new Camera("ll", Camera.transformInchDeg(0, 0, 0, 0, 51, 0)));
-        // toast.addCamera(new Camera("bl", Camera.transformInchDeg(0, 0, 0, 0, 51, 0)));
-        // toast.addCamera(new Camera("rl", Camera.transformInchDeg(0, 0, 0, 0, 51, 0)));
+        final double a = 8.258;
+        final double b = 10.52;
+        final double h = 9.446;
+        final double p = 51;
 
-        // toast.iterCams(cam -> cam.addPipeline(new AprilTags()));
+        toast.addCamera(new Camera("fl", Camera.transformInchDeg(b, a, h, 0, p, 0)));
+        toast.addCamera(new Camera("fr", Camera.transformInchDeg(b, -a, h, 0, p, 0)));
+
+        toast.addCamera(new Camera("ll", Camera.transformInchDeg(-a, b, h, 0, p, 90)));
+        toast.addCamera(new Camera("lr", Camera.transformInchDeg(a, b, h, 0, p, 90)));
+
+        toast.addCamera(new Camera("bl", Camera.transformInchDeg(-b, -a, h, 0, p, 180)));
+        toast.addCamera(new Camera("br", Camera.transformInchDeg(-b, a, h, 0, p, 180)));
+
+        toast.addCamera(new Camera("rl", Camera.transformInchDeg(a, -b, h, 0, p, 270)));
+        toast.addCamera(new Camera("rr", Camera.transformInchDeg(-a, b, h, 0, p, 270)));
+
+        toast.iterCams(cam -> cam.addPipeline(new AprilTags()));
     }
 
     @Override
@@ -176,7 +191,7 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
         inputSpeeds = new TorqueSwerveSpeeds(xVelocity, yVelocity, rVelocity);
     }
 
-    public boolean rotationLock = true;
+    public boolean rotationLock = false;
 
     @Override
     public final void update(final TorqueMode mode) {
@@ -193,13 +208,15 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
             manuallySetModuleStates(0, 0, 0, 0);
         } else {
             if (mode.isTeleop()) {
-                inputSpeeds = inputSpeeds
-                        .toFieldRelativeSpeeds(gyro.getHeadingCW()
-                                .plus(rotationLock
+                inputSpeeds = inputSpeeds.toFieldRelativeSpeeds(gyro.getHeadingCW().times(-1));
+                Debug.log("gyro", gyro.getHeadingCW().getDegrees());
+                                
+                        /*.plus(rotationLock
                                         ? gyro.getAngularVelocity()
                                                 .times(ANGULAR_VELOCITY_COEFFICIENT)
-                                        : new Rotation2d(0)))
-                        .times(elevator.isLowCG() ? speedSetting.speed : SpeedSetting.SLOW.speed);
+                                        : new Rotation2d(0)))*/
+
+                        //.times(elevator.isLowCG() ? speedSetting.speed : SpeedSetting.SLOW.speed);
             }
 
             swerveStates = kinematics.toSwerveModuleStates(inputSpeeds);
@@ -240,8 +257,8 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
     public boolean useVision = true;
 
     private void updateFeedback() {
-        // if (useVision)
-            // toast.update(poseEstimator::addVisionMeasurement);
+        if (useVision || true)
+            toast.update(poseEstimator::addVisionMeasurement);
 
         poseEstimator.update(gyro.getHeadingCW(), getModulePositions());
 

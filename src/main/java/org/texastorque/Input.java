@@ -77,8 +77,9 @@ public final class Input extends TorqueInput<TorqueController> implements Subsys
         speedDown.onTrue(() -> drivebase.speedSetting.shiftDown());
         speedUp.onTrue(() -> drivebase.speedSetting.shiftUp());
 
-        drivebase.useVision = !useVision.get();
-        drivebase.rotationLock = !rotationLock.get();
+        //drivebase.useVision = !useVision.get();
+        drivebase.useVision = true;
+        drivebase.rotationLock = false; // !rotationLock.get();
 
         final double xVelocity = TorqueMath.scaledLinearDeadband(driver.getLeftYAxis(), DEADBAND)
                 * Drivebase.MAX_VELOCITY_TELEOP;
