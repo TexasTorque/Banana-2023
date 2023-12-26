@@ -11,6 +11,7 @@ import org.texastorque.Ports;
 import org.texastorque.Subsystems;
 import org.texastorque.toast.lib.Camera;
 import org.texastorque.toast.lib.Toast;
+import org.texastorque.toast.lib.pipelines.AprilTags;
 import org.texastorque.toast.lib.pipelines.ObjectDetector;
 import org.texastorque.torquelib.base.TorqueMode;
 import org.texastorque.torquelib.base.TorqueState;
@@ -150,7 +151,7 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
 
         SmartDashboard.putData("FIELD", fieldMap);
 
-        bucketAlignPID = new PIDController(1, 0, 0);
+        bucketAlignPID = new PIDController(10, 0, 0);
     }
 
     public boolean isState(State state) {
@@ -180,6 +181,13 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
     public final void update(final TorqueMode mode) {
         updateFeedback();
         Debug.log("State", desiredState.toString());
+        toast.update(null);
+
+        double centerX =
+                ((ObjectDetector) toast.getCamera("fl").getPipe(new ObjectDetector().getClass()))
+                        .getBestObject().getCenterX();
+
+        Debug.log("centerX", centerX);
 
 
         if (desiredState == State.XF) {
@@ -196,13 +204,16 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
             }
 
             if (desiredState == State.BUCKET_ALIGN) {
-                ObjectDetector objd = (ObjectDetector) (toast.getCamera("fl").get().getPipe(new ObjectDetector().getClass()));
-                double centerX = objd.getBestObject().getCenterX();
-                inputSpeeds.omegaRadiansPerSecond = bucketAlignPID.calculate(centerX, 0);
+                // ObjectDetector objd = new ObjectDetector();
+                // objd = (ObjectDetector) (toast.getCamera("fl").get().getPipe(new
+                // ObjectDetector().getClass()));
+                // double centerX = ((ObjectDetector) toast.getCamera("fl").get()
+                // .getPipe(new ObjectDetector().getClass())).getBestObject().getCenterX();
+
+                inputSpeeds.omegaRadiansPerSecond = -bucketAlignPID.calculate(centerX, 0);
                 inputSpeeds.vxMetersPerSecond = 0;
                 inputSpeeds.vyMetersPerSecond = 0;
 
-                Debug.log("centerX", centerX);
             }
 
             swerveStates = kinematics.toSwerveModuleStates(inputSpeeds);
