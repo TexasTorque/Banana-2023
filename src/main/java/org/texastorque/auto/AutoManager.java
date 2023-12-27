@@ -1,6 +1,6 @@
 package org.texastorque.auto;
 
-import org.texastorque.auto.sequences.IntakeBucket;
+import org.texastorque.auto.sequences.BucketDemo;
 import org.texastorque.torquelib.auto.*;
 
 public final class AutoManager extends TorqueAutoManager {
@@ -13,7 +13,7 @@ public final class AutoManager extends TorqueAutoManager {
 
     @Override
     public final void init() {
-        addSequence(new IntakeBucket());
+        addSequence(new BucketDemo());
     }
 
     /**

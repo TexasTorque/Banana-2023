@@ -38,7 +38,7 @@ public class Wrist extends TorqueStatorSubsystem<Wrist.State> implements Subsyst
             addBlock(new TorqueRunWhile(new TorqueRun(() -> wrist.setState(desired)),
                     () -> !wrist.isAtState(desired)));
             addBlock(new TorqueRun(() -> elevator.setState(Elevator.State.INTAKE)));
-            addBlock(new TorqueRun(() -> wrist.finishedFirstWristSequence = true));
+            addBlock(new TorqueRun(() -> wrist.finishedRunningRotateSequence = true));
         }
     }
 
@@ -60,7 +60,7 @@ public class Wrist extends TorqueStatorSubsystem<Wrist.State> implements Subsyst
 
     private final double WRIST_OFFSET = 0.478;
 
-    public boolean finishedFirstWristSequence = false;
+    public boolean finishedRunningRotateSequence = false;
 
     public Wrist() {
         super(State.UP);
@@ -97,12 +97,16 @@ public class Wrist extends TorqueStatorSubsystem<Wrist.State> implements Subsyst
 
         boolean runningSeq = desiredState == State.ROTATE_RIGHT || desiredState == State.ROTATE_UP;
 
+        if (!runningSeq)
+            finishedRunningRotateSequence = false;
+
         wrist.setVolts(runningSeq ? 0
                 : controller.calculate(encoder.getPosition() - WRIST_OFFSET, desiredState.value));
 
         Debug.log("Wrist State", desiredState.toString());
         Debug.log("Wrist At State", isAtState());
         Debug.log("Wrist Position", encoder.getPosition() - WRIST_OFFSET);
+        Debug.log("Finished Running Rotate", finishedRunningRotateSequence);
     }
 
     public static synchronized final Wrist getInstance() {
