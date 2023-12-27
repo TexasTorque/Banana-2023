@@ -45,11 +45,15 @@ public class Intake extends TorqueStatorSubsystem<Intake.State> implements Subsy
     @Override
     public void initialize(final TorqueMode mode) {}
 
+    public boolean hasSpiked() {
+        return spiked;
+    }
 
     @Override
     public void update(final TorqueMode mode) {
         Debug.log("Rollers Current", rollers.getCurrent());
         Debug.log("Intake State", desiredState.toString());
+        Debug.log("hasSpiked", hasSpiked());
 
 
         if (desiredState == State.INTAKE) {

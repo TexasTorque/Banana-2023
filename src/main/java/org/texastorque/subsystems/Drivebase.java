@@ -6,6 +6,7 @@
  */
 package org.texastorque.subsystems;
 
+import java.util.Optional;
 import org.texastorque.Debug;
 import org.texastorque.Field;
 import org.texastorque.Ports;
@@ -13,14 +14,17 @@ import org.texastorque.Subsystems;
 import org.texastorque.toast.lib.Camera;
 import org.texastorque.toast.lib.Toast;
 import org.texastorque.toast.lib.pipelines.AprilTags;
+import org.texastorque.toast.lib.pipelines.ObjectDetector;
 import org.texastorque.torquelib.base.TorqueMode;
 import org.texastorque.torquelib.base.TorqueState;
 import org.texastorque.torquelib.base.TorqueStatorSubsystem;
 import org.texastorque.torquelib.sensors.TorqueNavXGyro;
 import org.texastorque.torquelib.swerve.TorqueSwerveSpeeds;
 import org.texastorque.torquelib.swerve.TorqueSwerveX;
+import org.texastorque.torquelib.util.TorqueMath;
 import edu.wpi.first.math.VecBuilder;
 import edu.wpi.first.math.Vector;
+import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.estimator.SwerveDrivePoseEstimator;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
@@ -36,7 +40,8 @@ import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
 public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> implements Subsystems {
     public static enum State implements TorqueState {
-        FIELD_RELATIVE(null), ROBOT_RELATIVE(null), XF(FIELD_RELATIVE), ZERO(FIELD_RELATIVE);
+        FIELD_RELATIVE(null), ROBOT_RELATIVE(null), BUCKET_ALIGN(ROBOT_RELATIVE), XF(
+                FIELD_RELATIVE), ZERO(FIELD_RELATIVE);
 
         public final State parent;
 
@@ -72,22 +77,20 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
     public static final Pose2d INITIAL_POS = new Pose2d(0, 0, Rotation2d.fromRadians(0));
 
     /**
-     * Standard deviations of model states. Increase these numbers to trust your
-     * model's state
-     * estimates less. This matrix is in the form [x, y, theta]ᵀ, with units in
-     * meters and radians,
+     * Standard deviations of model states. Increase these numbers to trust your model's state
+     * estimates less. This matrix is in the form [x, y, theta]ᵀ, with units in meters and radians,
      * then meters.
      */
-    private static final Vector<N3> STATE_STDS = VecBuilder.fill(0.05, 0.05, Units.degreesToRadians(5));
+    private static final Vector<N3> STATE_STDS =
+            VecBuilder.fill(0.05, 0.05, Units.degreesToRadians(5));
 
     /**
-     * Standard deviations of the vision measurements. Increase these numbers to
-     * trust global
-     * measurements from vision less. This matrix is in the form [x, y, theta]ᵀ,
-     * with units in
+     * Standard deviations of the vision measurements. Increase these numbers to trust global
+     * measurements from vision less. This matrix is in the form [x, y, theta]ᵀ, with units in
      * meters and radians.
      */
-    private static final Vector<N3> VISION_STDS = VecBuilder.fill(0.1, 0.1, Units.degreesToRadians(10));
+    private static final Vector<N3> VISION_STDS =
+            VecBuilder.fill(0.1, 0.1, Units.degreesToRadians(10));
 
     public final static double MAX_VELOCITY_TELEOP = 4.6, MAX_ACCELERATION = 2,
             MAX_ANGULAR_VELOCITY = 6;
@@ -125,6 +128,8 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
 
     public double ANGULAR_VELOCITY_COEFFICIENT = .085;
 
+    private final PIDController bucketAlignPID;
+
     private Drivebase() {
         super(State.FIELD_RELATIVE);
 
@@ -149,6 +154,8 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
 
         toast = new Toast(Field.getCurrentFieldLayout());
 
+        bucketAlignPID = new PIDController(.1, 0, 0);
+
         final double a = 8.258;
         final double b = 10.52;
         final double h = 9.446;
@@ -167,6 +174,8 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
         toast.addCamera(new Camera("rr", Camera.transformInchDeg(-a, b, h, 0, p, 270)));
 
         toast.iterCams(cam -> cam.addPipeline(new AprilTags()));
+
+        toast.getCamera("fl").addPipeline(new ObjectDetector());
     }
 
     @Override
@@ -181,9 +190,10 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
     }
 
     public SwerveModulePosition[] getModulePositions() {
-        return new SwerveModulePosition[] { invertSwerveModuleDistance(fl.getPosition()),
+        return new SwerveModulePosition[] {invertSwerveModuleDistance(fl.getPosition()),
                 invertSwerveModuleDistance(fr.getPosition()),
-                invertSwerveModuleDistance(bl.getPosition()), invertSwerveModuleDistance(br.getPosition()) };
+                invertSwerveModuleDistance(bl.getPosition()),
+                invertSwerveModuleDistance(br.getPosition())};
     }
 
     public void setInputSpeeds(final double xVelocity, final double yVelocity,
@@ -191,16 +201,26 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
         inputSpeeds = new TorqueSwerveSpeeds(xVelocity, yVelocity, rVelocity);
     }
 
-    public boolean rotationLock = false;
+    double lastGyro = 0, lastCenterX = 0;
+
+    public boolean isAlignedToBucket() {
+        return TorqueMath.toleranced(gyro.getHeadingCW().getDegrees(), lastCenterX + lastGyro, 2);
+    }
 
     @Override
     public final void update(final TorqueMode mode) {
         updateFeedback();
         Debug.log("State", desiredState.toString());
+        Debug.log("Aligned To Bucket", isAlignedToBucket());
 
-        ANGULAR_VELOCITY_COEFFICIENT = SmartDashboard.getNumber("Angular Velocity Coeff", ANGULAR_VELOCITY_COEFFICIENT);
+        ANGULAR_VELOCITY_COEFFICIENT =
+                SmartDashboard.getNumber("Angular Velocity Coeff", ANGULAR_VELOCITY_COEFFICIENT);
         SmartDashboard.putNumber("Gyro Angular Velocity", gyro.getAngularVelocity().getDegrees());
-        Debug.log("Rotation Lock", rotationLock);
+
+        final ObjectDetector objDect =
+                (ObjectDetector) toast.getCamera("fl").getPipe(new ObjectDetector().getClass());
+        final Optional<ObjectDetector.DetectedObject> bestObjectOpt = objDect.getBestObject();
+
 
         if (desiredState == State.XF) {
             manuallySetModuleStates(0.79, 2.36, 2.36, 0.79);
@@ -208,16 +228,31 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
             manuallySetModuleStates(0, 0, 0, 0);
         } else {
             if (mode.isTeleop()) {
-                inputSpeeds = inputSpeeds.toFieldRelativeSpeeds(gyro.getHeadingCW().times(-1));
-                Debug.log("gyro", gyro.getHeadingCW().getDegrees());
-                                
-                        /*.plus(rotationLock
-                                        ? gyro.getAngularVelocity()
-                                                .times(ANGULAR_VELOCITY_COEFFICIENT)
-                                        : new Rotation2d(0)))*/
-
-                        //.times(elevator.isLowCG() ? speedSetting.speed : SpeedSetting.SLOW.speed);
+                inputSpeeds = inputSpeeds.toFieldRelativeSpeeds(gyro.getHeadingCW().times(-1))
+                        .times(elevator.isLowCG() ? speedSetting.speed : SpeedSetting.SLOW.speed);
+                /*
+                 * .plus(rotationLock ? gyro.getAngularVelocity()
+                 * .times(ANGULAR_VELOCITY_COEFFICIENT) : new Rotation2d(0)))
+                 */
             }
+
+            if (desiredState == State.BUCKET_ALIGN) {
+                if (bestObjectOpt.isEmpty()) {
+                    inputSpeeds.omegaRadiansPerSecond = Math.PI / 3;
+                } else {
+                    inputSpeeds.omegaRadiansPerSecond = Math.min(bucketAlignPID
+                            .calculate(gyro.getHeadingCW().getDegrees(), lastCenterX + lastGyro), .5);
+                }
+                inputSpeeds.vxMetersPerSecond = 0;
+                inputSpeeds.vyMetersPerSecond = 0;
+            } else {
+                lastGyro = gyro.getHeadingCW().getDegrees();
+                if (bestObjectOpt.isPresent())
+                    lastCenterX = bestObjectOpt.get().getCenterX();
+            }
+
+            Debug.log("Goal", lastCenterX + lastGyro);
+            Debug.log("Gyro", gyro.getHeadingCW().getDegrees());
 
             swerveStates = kinematics.toSwerveModuleStates(inputSpeeds);
 
@@ -236,9 +271,26 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
             }
         }
 
-        desiredState = desiredState.parent;
+        if (mode.isTeleop())
+            desiredState = desiredState.parent;
 
         Debug.log("Speed Shift State", speedSetting.toString());
+    }
+
+    public void orientWristForBucket() {
+        final ObjectDetector objDect =
+                (ObjectDetector) toast.getCamera("fl").getPipe(new ObjectDetector().getClass());
+        final Optional<ObjectDetector.DetectedObject> bestObjectOpt = objDect.getBestObject();
+
+        if (bestObjectOpt.isEmpty())
+            return;
+
+        if (bestObjectOpt.get().isUpRight()) {
+            wrist.setState(Wrist.State.ROTATE_UP);
+        } else {
+            wrist.setState(Wrist.State.ROTATE_RIGHT);
+        }
+
     }
 
     public void resetGyro() {
@@ -254,11 +306,8 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
         return poseEstimator.getEstimatedPosition();
     }
 
-    public boolean useVision = true;
-
     private void updateFeedback() {
-        if (useVision || true)
-            toast.update(poseEstimator::addVisionMeasurement);
+        toast.update(poseEstimator::addVisionMeasurement);
 
         poseEstimator.update(gyro.getHeadingCW(), getModulePositions());
 
@@ -269,7 +318,6 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
                 : Field.reflectPosition(poseEstimator.getEstimatedPosition()));
 
         Debug.log("Current Robot Pose", poseEstimator.getEstimatedPosition().toString());
-        Debug.log("Use Vision", useVision);
     }
 
     private void manuallySetModuleStates(final double flAngle, final double frAngle,
