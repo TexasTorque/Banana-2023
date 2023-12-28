@@ -1,7 +1,9 @@
 package org.texastorque;
 
+import java.util.Optional;
 import org.texastorque.subsystems.*;
 import org.texastorque.subsystems.Drivebase.State;
+import org.texastorque.toast.lib.pipelines.ObjectDetector;
 import org.texastorque.torquelib.base.TorqueInput;
 import org.texastorque.torquelib.control.TorqueBoolSupplier;
 import org.texastorque.torquelib.control.TorqueClickSupplier;
@@ -14,8 +16,9 @@ public final class Input extends TorqueInput<TorqueController> implements Subsys
 
     private final static double DEADBAND = 0.125;
 
-    private final TorqueBoolSupplier resetGyro, speedDown, speedUp, bucketAlign, goToIntake,
-            runIntake, runOuttake, mid, high, wristUp, wristDown, wristRight, dunk, zero;
+    private final TorqueBoolSupplier resetGyro, speedDown, speedUp, bucketAlign, bucketAlignClick,
+            goToIntake, runIntake, runOuttake, mid, high, wristUp, wristDown, wristRight, dunk,
+            zero, swapWrist;
 
     private final TorqueRequestableTimeout driverRumbleTimeout, operatorRumbleTimeout;
 
@@ -28,6 +31,7 @@ public final class Input extends TorqueInput<TorqueController> implements Subsys
         speedDown = new TorqueClickSupplier(driver::isLeftBumperDown);
         speedUp = new TorqueClickSupplier(driver::isRightBumperDown);
         bucketAlign = new TorqueBoolSupplier(driver::isAButtonDown);
+        bucketAlignClick = new TorqueClickSupplier(driver::isAButtonDown);
         zero = new TorqueBoolSupplier(driver::isLeftCenterButtonDown);
 
         goToIntake = new TorqueClickSupplier(operator::isAButtonDown);
@@ -39,6 +43,7 @@ public final class Input extends TorqueInput<TorqueController> implements Subsys
         wristUp = new TorqueBoolSupplier(operator::isDPADUpDown);
         wristDown = new TorqueClickSupplier(operator::isDPADDownDown);
         wristRight = new TorqueBoolSupplier(operator::isDPADRightDown);
+        swapWrist = new TorqueClickSupplier(operator::isRightBumperDown);
 
         driverRumbleTimeout = new TorqueRequestableTimeout();
         operatorRumbleTimeout = new TorqueRequestableTimeout();
@@ -54,12 +59,12 @@ public final class Input extends TorqueInput<TorqueController> implements Subsys
     }
 
     public void updateWrist() {
-        wristUp.onTrue(
-                () -> wrist.setState(elevator.isLowCG() ? Wrist.State.ROTATE_UP : Wrist.State.UP));
-        wristRight.onTrue(() -> wrist
-                .setState(elevator.isLowCG() ? Wrist.State.ROTATE_RIGHT : Wrist.State.RIGHT));
-        wristDown.onTrue(() -> wrist
-                .setState(elevator.isLowCG() ? Wrist.State.ROTATE_UP : Wrist.State.DOWN));
+        // TODO: run sequence instead of set state
+        wristUp.onTrue(() -> wrist.setState(elevator.isLowCG() ? Wrist.State.UP : Wrist.State.UP));
+        wristRight.onTrue(
+                () -> wrist.setState(elevator.isLowCG() ? Wrist.State.RIGHT : Wrist.State.RIGHT));
+        wristDown.onTrue(
+                () -> wrist.setState(elevator.isLowCG() ? Wrist.State.UP : Wrist.State.DOWN));
     }
 
     public void updateIntake() {
@@ -73,13 +78,27 @@ public final class Input extends TorqueInput<TorqueController> implements Subsys
         high.onTrue(() -> elevator.setState(Elevator.State.HIGH));
         dunk.onTrue(() -> elevator
                 .setState(elevator.isAtMid() ? Elevator.State.MID_DUNK : Elevator.State.HIGH_DUNK));
+        swapWrist.onTrue(() -> elevator.setState(Elevator.State.SWAP_INTAKE));
     }
 
     public void updateDrivebase() {
         resetGyro.onTrue(() -> drivebase.resetGyro());
         speedDown.onTrue(() -> drivebase.speedSetting.shiftDown());
         speedUp.onTrue(() -> drivebase.speedSetting.shiftUp());
-        bucketAlign.onTrue(() -> drivebase.setState(Drivebase.State.BUCKET_ALIGN));
+
+        bucketAlignClick.onTrue(() -> {
+            Optional<ObjectDetector.DetectedObject> opt = drivebase.getDetectedBucket();
+            if (opt.isPresent())
+                drivebase.setAlignTarget(opt.get().getCenterX());
+            else
+                setDriverRumbleFor(.5);
+        });
+
+        bucketAlign.onTrue(() -> {
+            if (drivebase.getDetectedBucket().isPresent())
+                drivebase.setState(Drivebase.State.ALIGN_TO_ANGLE);
+        });
+
         zero.onTrue(() -> drivebase.setState(State.ZERO));
 
         final double xVelocity = TorqueMath.scaledLinearDeadband(driver.getLeftYAxis(), DEADBAND)

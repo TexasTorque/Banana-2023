@@ -40,7 +40,7 @@ import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
 public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> implements Subsystems {
     public static enum State implements TorqueState {
-        FIELD_RELATIVE(null), ROBOT_RELATIVE(null), BUCKET_ALIGN(ROBOT_RELATIVE), XF(
+        FIELD_RELATIVE(null), ROBOT_RELATIVE(null), ALIGN_TO_ANGLE(ROBOT_RELATIVE), XF(
                 FIELD_RELATIVE), ZERO(FIELD_RELATIVE);
 
         public final State parent;
@@ -128,9 +128,12 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
 
     public double ANGULAR_VELOCITY_COEFFICIENT = .085;
 
-    private final PIDController bucketAlignPID;
+    private final PIDController alignPID;
 
-    private Optional<ObjectDetector.DetectedObject> detectedBucket;
+    public Optional<ObjectDetector.DetectedObject> getDetectedBucket() {
+        return ((ObjectDetector) toast.getCamera("fl").getPipe(new ObjectDetector().getClass()))
+                .getBestObject();
+    }
 
 
     private Drivebase() {
@@ -157,10 +160,8 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
 
         toast = new Toast(Field.getCurrentFieldLayout());
 
-        bucketAlignPID = new PIDController(.15, 0, 0);
-        bucketAlignPID.enableContinuousInput(0, 360);
-
-
+        alignPID = new PIDController(.15, 0, 0);
+        alignPID.enableContinuousInput(0, 360);
 
         final double a = 8.258;
         final double b = 10.52;
@@ -183,9 +184,6 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
 
         toast.getCamera("fl").addPipeline(new ObjectDetector());
 
-        detectedBucket =
-                ((ObjectDetector) toast.getCamera("fl").getPipe(new ObjectDetector().getClass()))
-                        .getBestObject();
     }
 
     @Override
@@ -211,26 +209,21 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
         inputSpeeds = new TorqueSwerveSpeeds(xVelocity, yVelocity, rVelocity);
     }
 
-    double lastBucketOffset = 0;
+    private double alignTarget = 0;
 
-    public boolean isAlignedToBucket() {
-        return TorqueMath.toleranced(gyro.getHeadingCW().getDegrees(), lastBucketOffset, 4);
+    public void setAlignTarget(final double target) {
+        alignTarget = target;
+    }
+
+    public boolean isAligned() {
+        return TorqueMath.toleranced(gyro.getHeadingCW().getDegrees(), alignTarget, 4);
     }
 
     @Override
     public final void update(final TorqueMode mode) {
         updateFeedback();
         Debug.log("State", desiredState.toString());
-        Debug.log("Aligned To Bucket", isAlignedToBucket());
-
-        detectedBucket =
-                ((ObjectDetector) toast.getCamera("fl").getPipe(new ObjectDetector().getClass()))
-                        .getBestObject();
-
-        // if (detectedBucket.isPresent() && desiredState != State.BUCKET_ALIGN) {
-        // lastBucketOffset =
-        // detectedBucket.get().getCenterX() + gyro.getHeadingCW().getDegrees();
-        // }
+        Debug.log("Aligned To Bucket", isAligned());
 
         if (desiredState == State.XF) {
             manuallySetModuleStates(0.79, 2.36, 2.36, 0.79);
@@ -242,22 +235,18 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
                         .times(elevator.isLowCG() ? speedSetting.speed : SpeedSetting.SLOW.speed);
             }
 
-            if (desiredState == State.BUCKET_ALIGN) {
-                inputSpeeds.omegaRadiansPerSecond = bucketAlignPID
-                        .calculate(gyro.getHeadingCW().getDegrees(), lastBucketOffset);
+            if (desiredState == State.ALIGN_TO_ANGLE) {
+                inputSpeeds.omegaRadiansPerSecond =
+                        alignPID.calculate(gyro.getHeadingCW().getDegrees(), alignTarget);
 
                 inputSpeeds.vxMetersPerSecond = 0;
                 inputSpeeds.vyMetersPerSecond = 0;
-            } else {
-                if (detectedBucket.isPresent()) {
-                    lastBucketOffset =
-                            detectedBucket.get().getCenterX() + gyro.getHeadingCW().getDegrees();
-                }
             }
 
-            Debug.log("Goal", lastBucketOffset);
+
+            Debug.log("Goal", alignTarget);
             Debug.log("Gyro", gyro.getHeadingCW().getDegrees());
-            Debug.log("seesBucket", seesBucket());
+            Debug.log("seesBucket", getDetectedBucket().isPresent());
 
             swerveStates = kinematics.toSwerveModuleStates(inputSpeeds);
 
@@ -282,32 +271,10 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
         Debug.log("Speed Shift State", speedSetting.toString());
     }
 
-    public boolean seesBucket() {
-        // if (detectedBucket.isPresent()) lastBucketOffset = detectedBucket.get().getCenterX() +
-        // gyro.getHeadingCW().getDegrees();
-        return detectedBucket.isPresent();
-
-    }
-
-    // public void orientWristForBucket() {
-    // final ObjectDetector objDect =
-    // (ObjectDetector) toast.getCamera("fl").getPipe(new ObjectDetector().getClass());
-    // final Optional<ObjectDetector.DetectedObject> bestObjectOpt = objDect.getBestObject();
-
-    // if (bestObjectOpt.isEmpty())
-    // return;
-
-    // if (bestObjectOpt.get().isUpRight()) {
-    // wrist.setState(Wrist.State.ROTATE_UP);
-    // } else {
-    // wrist.setState(Wrist.State.ROTATE_RIGHT);
-    // }
-
-    // }
-
     public boolean isBucketUpRight() {
+        final Optional<ObjectDetector.DetectedObject> detectedBucket = getDetectedBucket();
         if (detectedBucket.isEmpty())
-            return false;
+            return true;
         return detectedBucket.get().isUpRight();
     }
 
@@ -316,7 +283,25 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
         poseEstimator.resetPosition(gyro.getHeadingCW(), getModulePositions(), INITIAL_POS);
     }
 
+    public double getGyroAngle() {
+        return gyro.getHeadingCW().getDegrees();
+    }
+
     public void resetPose(final Pose2d pose) {
+        // final ObjectDetector objDect =
+        // (ObjectDetector) toast.getCamera("fl").getPipe(new ObjectDetector().getClass());
+        // final Optional<ObjectDetector.DetectedObject> bestObjectOpt = objDect.getBestObject();
+
+        // if (bestObjectOpt.isEmpty())
+        // return;
+
+        // if (bestObjectOpt.get().isUpRight()) {
+        // wrist.setState(Wrist.State.ROTATE_UP);
+        // } else {
+        // wrist.setState(Wrist.State.ROTATE_RIGHT);
+        // }
+
+        // }
         poseEstimator.resetPosition(gyro.getHeadingCW(), getModulePositions(), pose);
     }
 

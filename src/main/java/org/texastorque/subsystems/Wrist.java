@@ -7,6 +7,7 @@ import org.texastorque.torquelib.auto.TorqueSequence;
 import org.texastorque.torquelib.auto.commands.TorqueRun;
 import org.texastorque.torquelib.auto.commands.TorqueRunWhile;
 import org.texastorque.torquelib.auto.commands.TorqueWaitUntil;
+import org.texastorque.torquelib.auto.commands.TorqueWhile;
 import org.texastorque.torquelib.base.TorqueMode;
 import org.texastorque.torquelib.base.TorqueState;
 import org.texastorque.torquelib.base.TorqueStatorSubsystem;
@@ -35,8 +36,10 @@ public class Wrist extends TorqueStatorSubsystem<Wrist.State> implements Subsyst
         public AutoRotateWrist(State desired) {
             addBlock(new TorqueRun(() -> elevator.setState(Elevator.State.SWAP_INTAKE)));
             addBlock(new TorqueWaitUntil(() -> elevator.isAtState()));
-            addBlock(new TorqueRunWhile(new TorqueRun(() -> wrist.setState(desired)),
+            addBlock(new TorqueWhile(new TorqueRun(() -> wrist.setState(desired)).sequence(),
                     () -> !wrist.isAtState(desired)));
+            addBlock(new TorqueRun(() -> wrist.setState(desired)));
+            addBlock(new TorqueWaitUntil(() -> wrist.isAtState()));
             addBlock(new TorqueRun(() -> elevator.setState(Elevator.State.INTAKE)));
             addBlock(new TorqueRun(() -> wrist.finishedRunningRotateSequence = true));
         }
