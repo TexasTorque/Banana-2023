@@ -5,7 +5,7 @@ import org.texastorque.Ports;
 import org.texastorque.Subsystems;
 import org.texastorque.torquelib.auto.TorqueSequence;
 import org.texastorque.torquelib.auto.commands.TorqueRun;
-import org.texastorque.torquelib.auto.commands.TorqueRunWhile;
+import org.texastorque.torquelib.auto.commands.TorqueSwitch;
 import org.texastorque.torquelib.auto.commands.TorqueWaitUntil;
 import org.texastorque.torquelib.auto.commands.TorqueWhile;
 import org.texastorque.torquelib.base.TorqueMode;
@@ -33,11 +33,14 @@ public class Wrist extends TorqueStatorSubsystem<Wrist.State> implements Subsyst
     }
 
     public static final class AutoRotateWrist extends TorqueSequence implements Subsystems {
-        public AutoRotateWrist(State desired) {
+        public AutoRotateWrist(final Wrist.State desired) {
+           
+            // addBlock(new TorqueSwitch(() -> wrist.isAtState(desired), (new TorqueRun(() -> this.exit())).sequence()));
+
             addBlock(new TorqueRun(() -> elevator.setState(Elevator.State.SWAP_INTAKE)));
             addBlock(new TorqueWaitUntil(() -> elevator.isAtState()));
-            addBlock(new TorqueWhile(new TorqueRun(() -> wrist.setState(desired)).sequence(),
-                    () -> !wrist.isAtState(desired)));
+            addBlock(new TorqueWhile(() -> !wrist.isAtState(desired),
+                    new TorqueRun(() -> wrist.setState(desired)).sequence()));
             addBlock(new TorqueRun(() -> wrist.setState(desired)));
             addBlock(new TorqueWaitUntil(() -> wrist.isAtState()));
             addBlock(new TorqueRun(() -> elevator.setState(Elevator.State.INTAKE)));
@@ -46,10 +49,10 @@ public class Wrist extends TorqueStatorSubsystem<Wrist.State> implements Subsyst
     }
 
     public boolean isAtState() {
-        return TorqueMath.toleranced(encoder.getPosition() - WRIST_OFFSET, desiredState.value, .1);
+        return isAtState(desiredState);
     }
 
-    public boolean isAtState(State state) {
+    public boolean isAtState(final State state) {
         return TorqueMath.toleranced(encoder.getPosition() - WRIST_OFFSET, state.value, .1);
     }
 

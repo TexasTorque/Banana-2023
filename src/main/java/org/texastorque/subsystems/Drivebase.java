@@ -118,6 +118,10 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
 
     private final TorqueNavXGyro gyro = TorqueNavXGyro.getInstance();
 
+    public TorqueNavXGyro getGyro() {
+        return gyro;
+    }
+
     private SwerveModuleState[] swerveStates;
 
     public final Toast toast;
@@ -216,7 +220,7 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
     }
 
     public boolean isAligned() {
-        return TorqueMath.toleranced(gyro.getHeadingCW().getDegrees(), alignTarget, 4);
+        return TorqueMath.toleranced(gyro.getHeadingCW().getDegrees(), alignTarget, 5);
     }
 
     @Override
@@ -236,8 +240,8 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
             }
 
             if (desiredState == State.ALIGN_TO_ANGLE) {
-                inputSpeeds.omegaRadiansPerSecond =
-                        alignPID.calculate(gyro.getHeadingCW().getDegrees(), alignTarget);
+                inputSpeeds.omegaRadiansPerSecond = TorqueMath.constrain(alignPID.calculate(gyro.getHeadingCW().getDegrees(), alignTarget), .75);
+
 
                 inputSpeeds.vxMetersPerSecond = 0;
                 inputSpeeds.vyMetersPerSecond = 0;
