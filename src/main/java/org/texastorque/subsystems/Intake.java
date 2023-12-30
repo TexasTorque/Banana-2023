@@ -14,7 +14,7 @@ public class Intake extends TorqueStatorSubsystem<Intake.State> implements Subsy
     private static volatile Intake instance;
 
     public static enum State implements TorqueState {
-        OFF(0), INTAKE(-12), OUTTAKE(2);
+        OFF(0), INTAKE(-12), OUTTAKE(10);
 
         public final double rollerSpeed;
 

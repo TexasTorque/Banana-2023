@@ -35,7 +35,7 @@ public class Wrist extends TorqueStatorSubsystem<Wrist.State> implements Subsyst
     public static final class AutoRotateWrist extends TorqueSequence implements Subsystems {
         public AutoRotateWrist(final Wrist.State desired) {
            
-            // addBlock(new TorqueSwitch(() -> wrist.isAtState(desired), (new TorqueRun(() -> this.exit())).sequence()));
+            addBlock(new TorqueSwitch(() -> wrist.isAtState(desired), (new TorqueRun(() -> this.exit())).sequence()));
 
             addBlock(new TorqueRun(() -> elevator.setState(Elevator.State.SWAP_INTAKE)));
             addBlock(new TorqueWaitUntil(() -> elevator.isAtState()));

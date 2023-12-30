@@ -3,7 +3,7 @@ package org.texastorque;
 import java.util.Optional;
 import org.texastorque.subsystems.*;
 import org.texastorque.subsystems.Drivebase.State;
-import org.texastorque.toast.lib.pipelines.ObjectDetector;
+import org.texastorque.toast.lib.pipelines.BucketDetector;
 import org.texastorque.torquelib.base.TorqueInput;
 import org.texastorque.torquelib.control.TorqueBoolSupplier;
 import org.texastorque.torquelib.control.TorqueClickSupplier;
@@ -87,7 +87,7 @@ public final class Input extends TorqueInput<TorqueController> implements Subsys
         speedUp.onTrue(() -> drivebase.speedSetting.shiftUp());
 
         bucketAlignClick.onTrue(() -> {
-            Optional<ObjectDetector.DetectedObject> opt = drivebase.getDetectedBucket();
+            Optional<BucketDetector.BucketDetection> opt = drivebase.getDetectedBucket();
             if (opt.isPresent())
                 drivebase.setAlignTarget(opt.get().getCenterX());
             else
