@@ -21,6 +21,7 @@ import org.texastorque.toast.lib.Toast;
 import org.texastorque.toast.lib.pipelines.AprilTags;
 import org.texastorque.toast.lib.pipelines.BucketDetector;
 import org.texastorque.toast.lib.pipelines.AprilTags.AprilTag;
+import org.texastorque.torquelib.auto.commands.TorqueFollowPath.TorquePathingDrivebase;
 import org.texastorque.torquelib.base.TorqueMode;
 import org.texastorque.torquelib.base.TorqueState;
 import org.texastorque.torquelib.base.TorqueStatorSubsystem;
@@ -44,7 +45,7 @@ import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.smartdashboard.Field2d;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
-public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> implements Subsystems {
+public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> implements Subsystems, TorquePathingDrivebase {
     public static enum State implements TorqueState {
         FIELD_RELATIVE(null), ROBOT_RELATIVE(null), ALIGN_TO_ANGLE(ROBOT_RELATIVE), XF(
                 FIELD_RELATIVE), ZERO(FIELD_RELATIVE);
@@ -315,9 +316,10 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
     }
 
     private void updateFeedback() {
-        toast.update(poseEstimator::addVisionMeasurement);
+        // toast.update(poseEstimator::addVisionMeasurement);
+        toast.update((Pose2d p, Double d) -> {}); // do nothing w/ vision
 
-        poseEstimator.update(gyro.getHeadingCW(), getModulePositions());
+        poseEstimator.update(gyro.getHeadingCCW(), getModulePositions());
 
         fieldMap.setRobotPose(poseEstimator.getEstimatedPosition());
 
@@ -334,6 +336,16 @@ public final class Drivebase extends TorqueStatorSubsystem<Drivebase.State> impl
         fr.setDesiredState(new SwerveModuleState(0, Rotation2d.fromRadians(frAngle)));
         bl.setDesiredState(new SwerveModuleState(0, Rotation2d.fromRadians(blAngle)));
         br.setDesiredState(new SwerveModuleState(0, Rotation2d.fromRadians(brAngle)));
+    }
+
+    @Override
+    public void setPose(final Pose2d pose) {
+        resetPose(pose);
+    }
+
+    @Override
+    public void setInputSpeeds(final TorqueSwerveSpeeds speeds) {
+        this.inputSpeeds = speeds.times(-1, -1, -1);
     }
 
 }

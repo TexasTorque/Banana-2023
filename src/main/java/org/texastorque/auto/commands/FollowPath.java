@@ -29,8 +29,8 @@ import edu.wpi.first.wpilibj.Timer;
 public final class FollowPath extends TorqueCommand implements Subsystems {
     public static final double MAX_VELOCITY_PATH = 4, MAX_ACCELERATION_PATH = 2;
 
-    private final PIDController xController = new PIDController(3, 0, 0);
-    private final PIDController yController = new PIDController(3, 0, 0);
+    private final PIDController xController = new PIDController(1, 0, 0);
+    private final PIDController yController = new PIDController(1, 0, 0);
 
     private final PIDController omegaController;
     private final PPHolonomicDriveController controller;
@@ -54,7 +54,7 @@ public final class FollowPath extends TorqueCommand implements Subsystems {
 
     public FollowPath(final String name, final Map<String, TorqueCommand> commands, final double maxSpeed,
             final double maxAcceleration) {
-        omegaController = new PIDController(Math.PI * 2, 0, .0);
+        omegaController = new PIDController(Math.PI * .5, 0, .0);
 
         xController.setTolerance(0.01);
         yController.setTolerance(0.01);
@@ -68,7 +68,6 @@ public final class FollowPath extends TorqueCommand implements Subsystems {
         unpassed = new ArrayList<EventMarker>();
         this.commands = commands;
         running = new ArrayList<TorqueCommand>();
-
     }
 
     public void addEvent(final String name, final TorqueCommand command) {

@@ -14,7 +14,7 @@ import org.texastorque.torquelib.util.TorqueMath;
 public final class Input extends TorqueInput<TorqueController> implements Subsystems {
     private static volatile Input instance;
 
-    private final static double DEADBAND = 0.125;
+    private final static double DEADBAND = 0.025;
 
     private final TorqueBoolSupplier resetGyro, speedDown, speedUp, bucketAlign, bucketAlignClick,
             goToIntake, runIntake, runOuttake, mid, high, wristUp, wristDown, wristRight, dunk,

@@ -1,17 +1,28 @@
 package org.texastorque.auto.sequences;
 
+import java.util.Map;
 import java.util.function.BooleanSupplier;
+import java.util.function.DoubleSupplier;
 
+import org.texastorque.Field;
 import org.texastorque.Subsystems;
 import org.texastorque.subsystems.*;
 import org.texastorque.torquelib.auto.TorqueSequence;
+import org.texastorque.torquelib.auto.commands.TorqueFollowPath;
 import org.texastorque.torquelib.auto.commands.TorqueRun;
 import org.texastorque.torquelib.auto.commands.TorqueSwitch;
 import org.texastorque.torquelib.auto.commands.TorqueWaitTime;
 import org.texastorque.torquelib.auto.commands.TorqueWaitUntil;
 import org.texastorque.torquelib.auto.commands.TorqueWhile;
 
+import com.pathplanner.lib.PathConstraints;
+import com.pathplanner.lib.PathPlanner;
+import com.pathplanner.lib.PathPlannerTrajectory;
+import com.pathplanner.lib.PathPoint;
+
+import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.networktables.DoubleSubscriber;
 
 public class BucketDemo extends TorqueSequence implements Subsystems {
 
@@ -23,7 +34,6 @@ public class BucketDemo extends TorqueSequence implements Subsystems {
             addBlock(new TorqueRun(() -> wrist.setState(Wrist.State.RIGHT)));
             addBlock(new TorqueWaitUntil(() -> wrist.isAtState()));
             addBlock(new TorqueWaitUntil(() -> elevator.isAtState()));
-            
 
             addBlock(new TorqueRun(() -> drivebase.setInputSpeeds(-.4, 0, 0)));
             addBlock(new TorqueWaitTime(1));
@@ -32,61 +42,46 @@ public class BucketDemo extends TorqueSequence implements Subsystems {
             addBlock(new TorqueRun(() -> intake.setState(Intake.State.OUTTAKE)));
             addBlock(new TorqueWaitTime(1));
             addBlock(new TorqueRun(() -> intake.setState(Intake.State.OFF)));
+
+            addBlock(new TorqueRun(() -> drivebase.setInputSpeeds(.4, 0, 0)));
+            addBlock(new TorqueWaitTime(1));
+            addBlock(new TorqueRun(() -> drivebase.setInputSpeeds(0, 0, 0)));
+
+            addBlock(new TorqueRun(() -> elevator.setState(Elevator.State.INTAKE)));
+            addBlock(new TorqueRun(() -> wrist.setState(Wrist.State.UP)));
         }
+    }
+
+    public static PathPlannerTrajectory generateTrajectoryToPose(final Pose2d targetPose) {
+        final Pose2d currentPose = drivebase.getPose();
+
+        final Rotation2d initialHeading = Rotation2d.fromDegrees(0);
+        final double initialVelocity = 0;
+
+        final PathPoint startingPoint = new PathPoint(currentPose.getTranslation(), initialHeading, currentPose.getRotation());
+        final PathPoint endingPoint = new PathPoint(targetPose.getTranslation(), Rotation2d.fromDegrees(180), currentPose.getRotation());
+
+        final PathConstraints pathConstraints= new PathConstraints(.5, .5);
+
+        return PathPlanner.generatePath(pathConstraints, startingPoint, endingPoint);
     }
 
     public static class DriveToDumpSite extends TorqueSequence {
 
-        private int tagToFind = 0;
-
-        private boolean tagNotInView() {
-            return drivebase.getTag(tagToFind).isEmpty();
+        private PathPlannerTrajectory generateTrajectory(final BooleanSupplier isBlue) {
+            final Pose2d targetPose = isBlue.getAsBoolean() ? Field.BLUE_DUMP_ZONE : Field.ORANGE_DUMP_ZONE;
+            return generateTrajectoryToPose(targetPose);
         }
+ 
+        public DriveToDumpSite(final BooleanSupplier isBlue) {
 
-        private double timeToDeposit = 0;
+            addBlock(new TorqueRun(() -> drivebase.setState(Drivebase.State.FIELD_RELATIVE)));
+            addBlock(new TorqueFollowPath(drivebase, () -> generateTrajectory(isBlue), Map.of()));
 
-        private boolean isCloseToTag() {
-            var opt = drivebase.getTag(tagToFind);
-            if (opt.isEmpty()) return false;
-            return opt.get().distance <= 3.5;
-        }
-
-        private double tagAngle = 0;
-
-        private double getTagAngle() {
-            if (!tagNotInView())
-                tagAngle = drivebase.getTag(tagToFind).get().angleOffset + drivebase.getGyro().getHeadingCW().getDegrees();
-            return tagAngle;
-        }
-
-        public DriveToDumpSite(final BooleanSupplier isBlue, double timeToSpike) {
-
-            addBlock(new TorqueRun(() -> tagToFind = isBlue.getAsBoolean() ? 2 : 4));
-
-            addBlock(new TorqueWhile(this::tagNotInView, new TurnAndLook()));
-
-            addBlock(new TorqueRun(() -> drivebase.setAlignTarget(this::getTagAngle)));
-
-            addBlock(new TorqueRun(() -> drivebase.setInputSpeeds(-.5, 0, 0)));
-            addBlock(new TorqueRun(() -> drivebase.setState(Drivebase.State.ALIGN_TO_ANGLE)));
-
-            addBlock(new TorqueWaitUntil(this::isCloseToTag, (final double t) -> timeToDeposit = t));
-            addBlock(new TorqueRun(() -> drivebase.setState(Drivebase.State.ROBOT_RELATIVE)));
-
-            addBlock(new TorqueRun(() -> drivebase.setInputSpeeds(0, 0, 0)));
 
             addBlock(new DumpBucket().command());
 
-            addBlock(new TorqueRun(() -> drivebase.setState(Drivebase.State.ROBOT_RELATIVE)));
-            addBlock(new TorqueRun(() -> drivebase.setInputSpeeds(.5, 0, 0)));
-            addBlock(new TorqueWaitTime(timeToSpike * .5));
-            addBlock(new TorqueRun(() -> drivebase.setInputSpeeds(0, 0, 0)));
-
-            addBlock(new TorqueRun(() -> wrist.setState(Wrist.State.UP)));
-            addBlock(new TorqueWaitUntil(() -> wrist.isAtState()));
-
-            addBlock(new TorqueRun(() -> elevator.setState(Elevator.State.INTAKE)));
-            addBlock(new TorqueWaitUntil(() -> elevator.isAtState()));
+            addBlock(new TurnDegrees(() -> 180).command());
         }
     }
 
@@ -118,11 +113,13 @@ public class BucketDemo extends TorqueSequence implements Subsystems {
             addBlock(new TorqueRun(() -> drivebase.setInputSpeeds(-.5, 0, 0)));
 
             addBlock(new TorqueWaitUntil(() -> intake.hasSpiked(), (final double t) -> timeToSpike = t));
+            addBlock(new TorqueWaitTime(.5));
+
             addBlock(new TorqueRun(() -> drivebase.setInputSpeeds(0, 0, 0)));
             addBlock(new TorqueRun(() -> elevator.setState(Elevator.State.SWAP_INTAKE)));
             addBlock(new TorqueWaitUntil(elevator::isAtState));
 
-            addBlock(new DriveToDumpSite(() -> isBucketBlue, timeToSpike).command());
+            addBlock(new DriveToDumpSite(() -> isBucketBlue).command());
 
             // Drive back
             // addBlock(new TorqueRun(() -> drivebase.setState(Drivebase.State.ROBOT_RELATIVE)));
@@ -132,11 +129,10 @@ public class BucketDemo extends TorqueSequence implements Subsystems {
         }
     }
 
-
-    public static class TurnAndLook extends TorqueSequence {
-        public TurnAndLook() {
+    public static class TurnDegrees extends TorqueSequence {
+        public TurnDegrees(final DoubleSupplier degrees) {
             addBlock(new TorqueRun(() -> drivebase.setAlignTarget(
-                    drivebase.getGyro().getHeadingCW().getDegrees() + 45)));
+                    drivebase.getGyro().getHeadingCW().getDegrees() + degrees.getAsDouble())));
             addBlock(new TorqueRun(() -> drivebase.setInputSpeeds(0, 0, 0))); 
             addBlock(new TorqueRun(() -> drivebase.setState(Drivebase.State.ALIGN_TO_ANGLE)));
             addBlock(new TorqueWaitUntil(() -> drivebase.isAligned()));
@@ -153,7 +149,7 @@ public class BucketDemo extends TorqueSequence implements Subsystems {
             //    AttackBucket()
             // else
             //    FindBucket()
-            addBlock(new TorqueSwitch(() -> drivebase.getDetectedBucket().isPresent(), new AttackBucket(), new TurnAndLook())); 
+            addBlock(new TorqueSwitch(() -> drivebase.getDetectedBucket().isPresent(), new AttackBucket(), new TurnDegrees(() -> 45))); 
         }
     }
 
@@ -163,6 +159,7 @@ public class BucketDemo extends TorqueSequence implements Subsystems {
 
         // while (true)
         //    BucketDemoLoop();
-        addBlock(new TorqueWhile(() -> true, new BucketDemoLoop()));     
+        // addBlock(new TorqueWhile(() -> true, new BucketDemoLoop()));     
+        addBlock(new DriveToDumpSite(() -> true).command());
     }
 }

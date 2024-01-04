@@ -13,7 +13,7 @@ public class Elevator extends TorqueStatorSubsystem<Elevator.State> implements S
     private static volatile Elevator instance;
 
     public static enum State implements TorqueState {
-        INTAKE(0.5), SWAP_INTAKE(40), THROW(300), MID(450), MID_DUNK(350), HIGH(795), HIGH_DUNK(700);
+        INTAKE(0.5), SWAP_INTAKE(40), THROW(270), MID(450), MID_DUNK(350), HIGH(795), HIGH_DUNK(700);
 
         private final double MIN_HEIGHT = 0.5, MAX_HEIGHT = 800;
 
