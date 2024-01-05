@@ -4,6 +4,7 @@ import org.texastorque.auto.AutoManager;
 import org.texastorque.toast.lib.pipelines.BucketDetector;
 import org.texastorque.toast.lib.pipelines.BucketDetector.BucketDetection;
 import org.texastorque.torquelib.base.*;
+import com.pathplanner.lib.server.PathPlannerServer;
 
 public final class Robot extends TorqueRobotBase implements Subsystems {
 
@@ -17,5 +18,7 @@ public final class Robot extends TorqueRobotBase implements Subsystems {
         addSubsystem(lights);
 
         Debug.initDashboard();
+        PathPlannerServer.startServer(5811);
+
     }
 }

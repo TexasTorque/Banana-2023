@@ -1,8 +1,8 @@
 /**
  * Copyright 2023 Texas Torque.
  *
- * This file is part of Torque-2023, which is not licensed for distribution.
- * For more details, see ./license.txt or write <jus@justusl.com>.
+ * This file is part of Torque-2023, which is not licensed for distribution. For more details, see
+ * ./license.txt or write <jus@justusl.com>.
  */
 package org.texastorque.auto.commands;
 
@@ -42,8 +42,6 @@ public final class FollowPath extends TorqueCommand implements Subsystems {
     private final Map<String, TorqueCommand> commands;
     private final List<TorqueCommand> running;
 
-    private static boolean firstPath = true;
-
     public FollowPath(final String name) {
         this(name, MAX_VELOCITY_PATH, MAX_ACCELERATION_PATH);
     }
@@ -52,9 +50,9 @@ public final class FollowPath extends TorqueCommand implements Subsystems {
         this(name, EventMap.get(), maxSpeed, maxAcceleration);
     }
 
-    public FollowPath(final String name, final Map<String, TorqueCommand> commands, final double maxSpeed,
-            final double maxAcceleration) {
-        omegaController = new PIDController(Math.PI * .5, 0, .0);
+    public FollowPath(final String name, final Map<String, TorqueCommand> commands,
+            final double maxSpeed, final double maxAcceleration) {
+        omegaController = new PIDController(Math.PI * 2, 0, .0);
 
         xController.setTolerance(0.01);
         yController.setTolerance(0.01);
@@ -86,11 +84,6 @@ public final class FollowPath extends TorqueCommand implements Subsystems {
         unpassed.clear();
         unpassed.addAll(events);
         running.clear();
-
-        final Pose2d startingPose = reflect(trajectory.getInitialState()).poseMeters;
-        if (firstPath) drivebase.resetPose(new Pose2d(startingPose.getTranslation(), startingPose.getRotation()));
-        else drivebase.resetPose(startingPose);
-        firstPath = false;
     }
 
     @Override
@@ -118,7 +111,8 @@ public final class FollowPath extends TorqueCommand implements Subsystems {
                 running.remove(i);
 
         PathPlannerServer.sendPathFollowingData(
-                new Pose2d(desired.poseMeters.getTranslation(), desired.holonomicRotation), drivebase.getPose());
+                new Pose2d(desired.poseMeters.getTranslation(), desired.holonomicRotation),
+                drivebase.getPose());
     }
 
     @Override
@@ -141,6 +135,7 @@ public final class FollowPath extends TorqueCommand implements Subsystems {
     }
 
     private final PathPlannerState reflect(final Trajectory.State state) {
-        return PathPlannerTrajectory.transformStateForAlliance((PathPlannerState) state, DriverStation.getAlliance());
+        return PathPlannerTrajectory.transformStateForAlliance((PathPlannerState) state,
+                DriverStation.getAlliance());
     }
 }

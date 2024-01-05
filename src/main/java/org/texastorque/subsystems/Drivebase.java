@@ -9,9 +9,6 @@ package org.texastorque.subsystems;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.DoubleSupplier;
-
-import javax.swing.text.html.Option;
-
 import org.texastorque.Debug;
 import org.texastorque.Field;
 import org.texastorque.Ports;

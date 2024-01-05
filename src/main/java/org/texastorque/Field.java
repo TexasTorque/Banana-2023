@@ -70,6 +70,6 @@ public final class Field {
         return newMap;
     }
 
-    public static final Pose2d ORANGE_DUMP_ZONE = new Pose2d(1.25, 2.25, Rotation2d.fromDegrees(90));
-    public static final Pose2d BLUE_DUMP_ZONE = new Pose2d(4, 0.6, Rotation2d.fromDegrees(0));
+    public static final Pose2d ORANGE_DUMP_ZONE = new Pose2d(5, 7, Rotation2d.fromDegrees(90));
+    public static final Pose2d BLUE_DUMP_ZONE = new Pose2d(4.69, 0, Rotation2d.fromDegrees(-90));
 }
